@@ -132,6 +132,7 @@ export function getIO(): SocketIOServer | null {
 // ─── Emit helpers ─────────────────────────────────────────────────────────────
 
 export function emitToDispatchers(event: string, data: unknown) {
+  console.log(`[Socket.IO] Emitting to dispatchers: ${event}`, data);
   io?.to("dispatchers").emit(event, data);
 }
 

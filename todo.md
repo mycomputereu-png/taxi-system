@@ -58,3 +58,5 @@
 - [x] Fixa eroare Client OTP - validare și mesaje de eroare
 - [x] Fixa ReferenceError require is not defined - dynamic import socket.io-client
 - [x] Fixa Map container not found - adaugă check și loading state
+- [x] Fixa Socket.IO timing - Dispatcher se conectează înainte de a emite auth
+- [x] Adaugă logging pentru Socket.IO events

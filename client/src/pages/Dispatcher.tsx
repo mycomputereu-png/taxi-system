@@ -10,7 +10,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
 import { getLoginUrl } from "@/const";
-import { useSocket } from "@/hooks/useSocket";
+import { useSocket, getSocket } from "@/hooks/useSocket";
 import {
   MapPin, Users, Car, Clock, Plus, Trash2, LogOut, CheckCircle, XCircle, Navigation
 } from "lucide-react";
@@ -36,7 +36,7 @@ type ClientMarker = {
 
 export default function Dispatcher() {
   const { user, loading, isAuthenticated, logout } = useAuth();
-  const { emit, on } = useSocket();
+  const { emit, on, socket: socketRef } = useSocket();
 
   const [mapReady, setMapReady] = useState(false);
   const mapRef = useRef<google.maps.Map | null>(null);
@@ -96,7 +96,19 @@ export default function Dispatcher() {
   // Socket.IO setup
   useEffect(() => {
     if (!isAuthenticated) return;
-    emit("auth:dispatcher");
+    
+    // Wait for Socket.IO to connect before emitting auth
+    const socket = socketRef.current || getSocket();
+    const handleConnect = () => {
+      console.log("[Dispatcher] Socket.IO connected, emitting auth:dispatcher");
+      emit("auth:dispatcher");
+    };
+    
+    if (socket.connected) {
+      handleConnect();
+    } else {
+      socket.once("connect", handleConnect);
+    }
 
     const unsubDriverLoc = on("driver:location", (data: { driverId: number; lat: number; lng: number }) => {
       setDriverLocations((prev) => {
@@ -112,6 +124,7 @@ export default function Dispatcher() {
     });
 
     const unsubRideNew = on("ride:new", (data: any) => {
+      console.log("[Dispatcher] Ride new event received:", data);
       toast.info(`🚖 Cerere nouă taxi de la ${data.clientPhone}`, { duration: 8000 });
       setClientLocations((prev) => {
         const next = new Map(prev);
@@ -120,9 +133,10 @@ export default function Dispatcher() {
           rideId: data.rideId,
           phone: data.clientPhone,
           name: data.clientName,
-          lat: data.lat,
-          lng: data.lng,
+          lat: parseFloat(String(data.lat)),
+          lng: parseFloat(String(data.lng)),
         });
+        console.log("[Dispatcher] Updated client locations:", next);
         return next;
       });
       utils.dispatcher.getActiveRides.invalidate();
@@ -243,7 +257,9 @@ export default function Dispatcher() {
     });
 
     // Client markers (red circle)
+    console.log("[Dispatcher] Rendering client markers, count:", clientLocations.size);
     clientLocations.forEach((c) => {
+      console.log("[Dispatcher] Processing client marker:", c);
       let marker = clientMarkersRef.current.get(c.id);
       if (!marker) {
         marker = new google.maps.Marker({
