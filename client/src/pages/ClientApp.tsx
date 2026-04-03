@@ -1,0 +1,540 @@
+import { useEffect, useRef, useState, useCallback } from "react";
+import { trpc } from "@/lib/trpc";
+import { MapView } from "@/components/Map";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { toast } from "sonner";
+import { useSocket } from "@/hooks/useSocket";
+import { Phone, MapPin, Car, Clock, CheckCircle, XCircle, Navigation } from "lucide-react";
+
+type ClientSession = { token: string; clientId: number; phone: string };
+
+const SESSION_KEY = "taxi_client_session";
+
+function loadSession(): ClientSession | null {
+  try {
+    const raw = localStorage.getItem(SESSION_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
+
+function saveSession(s: ClientSession) {
+  localStorage.setItem(SESSION_KEY, JSON.stringify(s));
+}
+
+function clearSession() {
+  localStorage.removeItem(SESSION_KEY);
+}
+
+type RideStatus = "idle" | "requesting" | "pending" | "assigned" | "accepted" | "in_progress" | "completed" | "rejected" | "cancelled";
+
+export default function ClientApp() {
+  const { emit, on } = useSocket();
+
+  // Auth state
+  const [session, setSession] = useState<ClientSession | null>(() => loadSession());
+  const [phone, setPhone] = useState("");
+  const [otp, setOtp] = useState("");
+  const [otpSent, setOtpSent] = useState(false);
+  const [devOtp, setDevOtp] = useState<string | null>(null);
+
+  // Ride state
+  const [rideStatus, setRideStatus] = useState<RideStatus>("idle");
+  const [rideId, setRideId] = useState<number | null>(null);
+  const [driverInfo, setDriverInfo] = useState<any>(null);
+  const [estimatedArrival, setEstimatedArrival] = useState<number | null>(null);
+
+  // Map state
+  const [mapReady, setMapReady] = useState(false);
+  const mapRef = useRef<google.maps.Map | null>(null);
+  const clientMarkerRef = useRef<google.maps.Marker | null>(null);
+  const driverMarkerRef = useRef<google.maps.Marker | null>(null);
+  const directionsRendererRef = useRef<google.maps.DirectionsRenderer | null>(null);
+  const locationWatchRef = useRef<number | null>(null);
+  const [clientPos, setClientPos] = useState<{ lat: number; lng: number } | null>(null);
+
+  // tRPC
+  const sendOtpMut = trpc.clientApp.sendOtp.useMutation({
+    onSuccess: (data) => {
+      setOtpSent(true);
+      setDevOtp(data.code ?? null);
+      toast.success("Cod OTP trimis! (demo: codul apare mai jos)");
+    },
+    onError: (e) => toast.error(e.message),
+  });
+
+  const verifyOtpMut = trpc.clientApp.verifyOtp.useMutation({
+    onSuccess: (data) => {
+      const s: ClientSession = { token: data.token, clientId: data.client.id, phone: data.client.phone };
+      saveSession(s);
+      setSession(s);
+      toast.success("Autentificat cu succes!");
+    },
+    onError: (e) => toast.error(e.message),
+  });
+
+  const requestRideMut = trpc.clientApp.requestRide.useMutation({
+    onSuccess: (data) => {
+      setRideId(data.ride.id);
+      setRideStatus("pending");
+      toast.success("Cerere trimisă la dispatcher!");
+    },
+    onError: (e) => toast.error(e.message),
+  });
+
+  const cancelRideMut = trpc.clientApp.cancelRide.useMutation({
+    onSuccess: () => {
+      setRideStatus("idle");
+      setRideId(null);
+      setDriverInfo(null);
+      clearDirections();
+      toast.info("Cursă anulată");
+    },
+  });
+
+  const activeRideQuery = trpc.clientApp.getActiveRide.useQuery(
+    { token: session?.token ?? "" },
+    { enabled: !!session, refetchInterval: 10000 }
+  );
+
+  // Sync active ride from server
+  useEffect(() => {
+    if (!activeRideQuery.data) return;
+    const ride = activeRideQuery.data;
+    setRideId(ride.id);
+    setRideStatus(ride.status as RideStatus);
+    if (ride.driver) setDriverInfo(ride.driver);
+    if (ride.estimatedArrival) setEstimatedArrival(ride.estimatedArrival);
+  }, [activeRideQuery.data]);
+
+  // Socket.IO auth and events
+  useEffect(() => {
+    if (!session) return;
+    const s = require("socket.io-client").io(window.location.origin, {
+      path: "/api/socket.io",
+      transports: ["websocket", "polling"],
+    });
+
+    s.on("connect", () => {
+      s.emit("auth:client", { token: session.token });
+    });
+
+    s.on("ride:assigned", (data: any) => {
+      setRideStatus("assigned");
+      setDriverInfo(data.driver);
+      toast.success(`Șofer asignat: ${data.driver?.name || "Șofer"}!`);
+    });
+
+    s.on("ride:accepted", (data: any) => {
+      setRideStatus("accepted");
+      setDriverInfo(data.driver);
+      toast.success(`Șoferul ${data.driver?.name} a acceptat cursa!`);
+      if (data.driver?.id) {
+        s.emit("track:driver", { driverId: data.driver.id });
+      }
+    });
+
+    s.on("ride:rejected", () => {
+      setRideStatus("rejected");
+      toast.error("Șoferul a refuzat cursa. Așteptați reasignare...");
+    });
+
+    s.on("ride:completed", () => {
+      setRideStatus("completed");
+      setDriverInfo(null);
+      clearDirections();
+      toast.success("Cursă finalizată! Mulțumim!");
+      setTimeout(() => setRideStatus("idle"), 5000);
+    });
+
+    s.on("ride:cancelled", () => {
+      setRideStatus("cancelled");
+      setDriverInfo(null);
+      clearDirections();
+      toast.info("Cursa a fost anulată");
+      setTimeout(() => setRideStatus("idle"), 3000);
+    });
+
+    s.on("driver:location:update", (data: { driverId: number; lat: number; lng: number }) => {
+      updateDriverMarker(data.lat, data.lng);
+      if (clientPos) {
+        drawRoute({ lat: data.lat, lng: data.lng }, clientPos);
+        calculateETA({ lat: data.lat, lng: data.lng }, clientPos);
+      }
+    });
+
+    return () => s.disconnect();
+  }, [session]);
+
+  // GPS tracking
+  useEffect(() => {
+    if (!session) return;
+    if (!navigator.geolocation) return;
+
+    locationWatchRef.current = navigator.geolocation.watchPosition(
+      (pos) => {
+        const { latitude: lat, longitude: lng } = pos.coords;
+        setClientPos({ lat, lng });
+        emit("location:client", { lat, lng });
+        updateClientMarker(lat, lng);
+      },
+      (err) => console.warn("GPS error:", err),
+      { enableHighAccuracy: true, maximumAge: 5000 }
+    );
+
+    return () => {
+      if (locationWatchRef.current !== null) {
+        navigator.geolocation.clearWatch(locationWatchRef.current);
+      }
+    };
+  }, [session, emit]);
+
+  const updateClientMarker = useCallback((lat: number, lng: number) => {
+    if (!mapRef.current) return;
+    if (!clientMarkerRef.current) {
+      clientMarkerRef.current = new google.maps.Marker({
+        map: mapRef.current,
+        icon: {
+          path: google.maps.SymbolPath.CIRCLE,
+          scale: 10,
+          fillColor: "#3b82f6",
+          fillOpacity: 1,
+          strokeColor: "#fff",
+          strokeWeight: 3,
+        },
+        title: "Locația mea",
+        zIndex: 100,
+      });
+    }
+    clientMarkerRef.current.setPosition({ lat, lng });
+    mapRef.current.panTo({ lat, lng });
+  }, []);
+
+  const updateDriverMarker = useCallback((lat: number, lng: number) => {
+    if (!mapRef.current) return;
+    if (!driverMarkerRef.current) {
+      driverMarkerRef.current = new google.maps.Marker({
+        map: mapRef.current,
+        icon: {
+          path: google.maps.SymbolPath.FORWARD_CLOSED_ARROW,
+          scale: 7,
+          fillColor: "#f59e0b",
+          fillOpacity: 1,
+          strokeColor: "#fff",
+          strokeWeight: 2,
+        },
+        title: "Șoferul tău",
+        zIndex: 200,
+      });
+    }
+    driverMarkerRef.current.setPosition({ lat, lng });
+  }, []);
+
+  const drawRoute = useCallback((from: { lat: number; lng: number }, to: { lat: number; lng: number }) => {
+    if (!mapRef.current) return;
+    if (!directionsRendererRef.current) {
+      directionsRendererRef.current = new google.maps.DirectionsRenderer({
+        map: mapRef.current,
+        suppressMarkers: true,
+        polylineOptions: {
+          strokeColor: "#3b82f6",
+          strokeWeight: 5,
+          strokeOpacity: 0.8,
+        },
+      });
+    }
+    const service = new google.maps.DirectionsService();
+    service.route(
+      {
+        origin: from,
+        destination: to,
+        travelMode: google.maps.TravelMode.DRIVING,
+      },
+      (result, status) => {
+        if (status === "OK" && result) {
+          directionsRendererRef.current!.setDirections(result);
+        }
+      }
+    );
+  }, []);
+
+  const calculateETA = useCallback((from: { lat: number; lng: number }, to: { lat: number; lng: number }) => {
+    const service = new google.maps.DistanceMatrixService();
+    service.getDistanceMatrix(
+      {
+        origins: [from],
+        destinations: [to],
+        travelMode: google.maps.TravelMode.DRIVING,
+      },
+      (result, status) => {
+        if (status === "OK" && result?.rows[0]?.elements[0]?.duration) {
+          const minutes = Math.ceil(result.rows[0].elements[0].duration.value / 60);
+          setEstimatedArrival(minutes);
+        }
+      }
+    );
+  }, []);
+
+  const clearDirections = useCallback(() => {
+    if (directionsRendererRef.current) {
+      directionsRendererRef.current.setMap(null);
+      directionsRendererRef.current = null;
+    }
+    if (driverMarkerRef.current) {
+      driverMarkerRef.current.setMap(null);
+      driverMarkerRef.current = null;
+    }
+    setEstimatedArrival(null);
+  }, []);
+
+  const handleMapReady = useCallback((map: google.maps.Map) => {
+    mapRef.current = map;
+    setMapReady(true);
+    // Try to center on user location
+    navigator.geolocation?.getCurrentPosition(
+      (pos) => {
+        map.setCenter({ lat: pos.coords.latitude, lng: pos.coords.longitude });
+        map.setZoom(15);
+      },
+      () => {
+        map.setCenter({ lat: 44.4268, lng: 26.1025 });
+        map.setZoom(13);
+      }
+    );
+  }, []);
+
+  const handleCallTaxi = () => {
+    if (!session || !clientPos) {
+      toast.error("Activați GPS-ul pentru a chema taxi");
+      return;
+    }
+    setRideStatus("requesting");
+    requestRideMut.mutate({
+      token: session.token,
+      lat: clientPos.lat,
+      lng: clientPos.lng,
+    });
+  };
+
+  const handleLogout = () => {
+    clearSession();
+    setSession(null);
+    setRideStatus("idle");
+    setRideId(null);
+    setDriverInfo(null);
+  };
+
+  // ─── Login Screen ─────────────────────────────────────────────────────────
+
+  if (!session) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-gray-950 via-blue-950 to-gray-900 flex items-center justify-center p-4">
+        <Card className="w-full max-w-sm bg-gray-900 border-gray-700 shadow-2xl">
+          <CardHeader className="text-center pb-2">
+            <div className="text-5xl mb-2">🚖</div>
+            <CardTitle className="text-white text-2xl font-bold">Taxi App</CardTitle>
+            <p className="text-gray-400 text-sm">Autentificare cu număr de telefon</p>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-4">
+            {!otpSent ? (
+              <>
+                <div className="relative">
+                  <Phone className="absolute left-3 top-3 w-4 h-4 text-gray-400" />
+                  <Input
+                    placeholder="+40 7XX XXX XXX"
+                    value={phone}
+                    onChange={(e) => setPhone(e.target.value)}
+                    className="bg-gray-800 border-gray-600 text-white pl-10"
+                    type="tel"
+                  />
+                </div>
+                <Button
+                  className="w-full bg-yellow-500 hover:bg-yellow-600 text-black font-bold text-lg py-6"
+                  onClick={() => sendOtpMut.mutate({ phone })}
+                  disabled={sendOtpMut.isPending || phone.length < 10}
+                >
+                  {sendOtpMut.isPending ? "Se trimite..." : "Trimite Cod OTP"}
+                </Button>
+              </>
+            ) : (
+              <>
+                <p className="text-gray-400 text-sm text-center">
+                  Introdu codul trimis la <span className="text-white font-semibold">{phone}</span>
+                </p>
+                {devOtp && (
+                  <div className="bg-blue-900 border border-blue-600 rounded-lg p-3 text-center">
+                    <p className="text-blue-300 text-xs mb-1">Cod demo (nu trimite SMS real):</p>
+                    <p className="text-white font-mono text-2xl font-bold tracking-widest">{devOtp}</p>
+                  </div>
+                )}
+                <Input
+                  placeholder="Cod OTP (6 cifre)"
+                  value={otp}
+                  onChange={(e) => setOtp(e.target.value)}
+                  className="bg-gray-800 border-gray-600 text-white text-center text-xl tracking-widest"
+                  maxLength={6}
+                />
+                <Button
+                  className="w-full bg-yellow-500 hover:bg-yellow-600 text-black font-bold text-lg py-6"
+                  onClick={() => verifyOtpMut.mutate({ phone, code: otp })}
+                  disabled={verifyOtpMut.isPending || otp.length !== 6}
+                >
+                  {verifyOtpMut.isPending ? "Se verifică..." : "Verifică Codul"}
+                </Button>
+                <Button
+                  variant="ghost"
+                  className="text-gray-400 hover:text-white"
+                  onClick={() => { setOtpSent(false); setOtp(""); setDevOtp(null); }}
+                >
+                  Schimbă numărul
+                </Button>
+              </>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  // ─── Main App ─────────────────────────────────────────────────────────────
+
+  const isRideActive = ["pending", "assigned", "accepted", "in_progress"].includes(rideStatus);
+
+  return (
+    <div className="min-h-screen bg-gray-950 flex flex-col">
+      {/* Header */}
+      <header className="bg-gray-900 border-b border-gray-800 px-4 py-3 flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <span className="text-xl">🚖</span>
+          <span className="text-yellow-400 font-bold">Taxi App</span>
+        </div>
+        <div className="flex items-center gap-3">
+          <span className="text-gray-400 text-sm">{session.phone}</span>
+          <Button variant="ghost" size="sm" onClick={handleLogout} className="text-gray-400 hover:text-white text-xs">
+            Ieșire
+          </Button>
+        </div>
+      </header>
+
+      {/* Map */}
+      <div className="flex-1 relative" style={{ minHeight: "60vh" }}>
+        <MapView onMapReady={handleMapReady} className="w-full h-full" />
+
+        {/* Status overlay */}
+        {rideStatus === "pending" && (
+          <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-gray-900 bg-opacity-95 rounded-xl px-4 py-2 flex items-center gap-2 shadow-lg">
+            <div className="w-2 h-2 bg-yellow-400 rounded-full animate-pulse"></div>
+            <span className="text-white text-sm font-medium">Se caută șofer...</span>
+          </div>
+        )}
+        {(rideStatus === "assigned") && (
+          <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-blue-900 bg-opacity-95 rounded-xl px-4 py-2 flex items-center gap-2 shadow-lg">
+            <Car className="w-4 h-4 text-blue-300" />
+            <span className="text-white text-sm font-medium">Șofer asignat, în așteptare acceptare...</span>
+          </div>
+        )}
+        {rideStatus === "accepted" && estimatedArrival && (
+          <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-green-900 bg-opacity-95 rounded-xl px-4 py-3 flex items-center gap-2 shadow-lg">
+            <Clock className="w-4 h-4 text-green-300" />
+            <span className="text-white text-sm font-medium">Șoferul vine în ~{estimatedArrival} min</span>
+          </div>
+        )}
+        {rideStatus === "completed" && (
+          <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-green-800 bg-opacity-95 rounded-xl px-4 py-2 flex items-center gap-2 shadow-lg">
+            <CheckCircle className="w-4 h-4 text-green-300" />
+            <span className="text-white text-sm font-medium">Cursă finalizată! Mulțumim!</span>
+          </div>
+        )}
+      </div>
+
+      {/* Bottom Panel */}
+      <div className="bg-gray-900 border-t border-gray-800 p-4">
+        {rideStatus === "idle" || rideStatus === "rejected" || rideStatus === "cancelled" ? (
+          <div className="flex flex-col gap-3">
+            {(rideStatus === "rejected" || rideStatus === "cancelled") && (
+              <div className="bg-red-900 border border-red-700 rounded-lg p-3 text-center">
+                <p className="text-red-300 text-sm">
+                  {rideStatus === "rejected" ? "Șoferul a refuzat cursa." : "Cursa a fost anulată."}
+                </p>
+              </div>
+            )}
+            <Button
+              className="w-full bg-yellow-500 hover:bg-yellow-600 text-black font-bold text-xl py-8 rounded-2xl shadow-lg"
+              onClick={handleCallTaxi}
+              disabled={requestRideMut.isPending || !clientPos}
+            >
+              <Car className="w-6 h-6 mr-3" />
+              {requestRideMut.isPending ? "Se trimite..." : "Cheamă Taxi"}
+            </Button>
+            {!clientPos && (
+              <p className="text-gray-500 text-xs text-center">
+                <MapPin className="w-3 h-3 inline mr-1" />
+                Activați GPS-ul pentru a chema taxi
+              </p>
+            )}
+          </div>
+        ) : rideStatus === "pending" ? (
+          <div className="flex flex-col gap-3">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-white font-semibold">Cerere trimisă</p>
+                <p className="text-gray-400 text-sm">Dispatcherul caută un șofer disponibil...</p>
+              </div>
+              <div className="w-8 h-8 border-2 border-yellow-400 border-t-transparent rounded-full animate-spin"></div>
+            </div>
+            <Button
+              variant="outline"
+              className="border-red-700 text-red-400 hover:bg-red-900"
+              onClick={() => rideId && cancelRideMut.mutate({ token: session.token, rideId })}
+            >
+              <XCircle className="w-4 h-4 mr-2" /> Anulează cererea
+            </Button>
+          </div>
+        ) : rideStatus === "assigned" ? (
+          <div className="flex flex-col gap-3">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 bg-blue-700 rounded-full flex items-center justify-center text-white font-bold">
+                {driverInfo?.name?.[0] || "S"}
+              </div>
+              <div>
+                <p className="text-white font-semibold">{driverInfo?.name || "Șofer asignat"}</p>
+                <p className="text-gray-400 text-sm">Așteptăm confirmarea șoferului...</p>
+              </div>
+            </div>
+            <Button
+              variant="outline"
+              className="border-red-700 text-red-400 hover:bg-red-900"
+              onClick={() => rideId && cancelRideMut.mutate({ token: session.token, rideId })}
+            >
+              <XCircle className="w-4 h-4 mr-2" /> Anulează
+            </Button>
+          </div>
+        ) : rideStatus === "accepted" || rideStatus === "in_progress" ? (
+          <div className="flex items-center gap-4">
+            <div className="w-12 h-12 bg-yellow-600 rounded-full flex items-center justify-center text-white font-bold text-lg">
+              {driverInfo?.name?.[0] || "S"}
+            </div>
+            <div className="flex-1">
+              <p className="text-white font-semibold">{driverInfo?.name || "Șoferul tău"}</p>
+              {driverInfo?.phone && <p className="text-gray-400 text-sm">{driverInfo.phone}</p>}
+              {estimatedArrival && (
+                <div className="flex items-center gap-1 mt-1">
+                  <Clock className="w-3 h-3 text-green-400" />
+                  <span className="text-green-400 text-sm font-medium">~{estimatedArrival} min</span>
+                </div>
+              )}
+            </div>
+            <div className="flex flex-col items-center">
+              <Navigation className="w-6 h-6 text-blue-400" />
+              <span className="text-blue-400 text-xs">Live</span>
+            </div>
+          </div>
+        ) : null}
+      </div>
+    </div>
+  );
+}
