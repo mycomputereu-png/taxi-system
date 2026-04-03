@@ -51,4 +51,7 @@
 - [x] Teste Vitest pentru proceduri backend
 - [x] Design consistent dark theme profesional
 - [x] Responsive mobile pentru client și șofer
+- [x] Tracking live șoferi pe hartă Dispatcher cu marcatori animați
+- [x] Panel statistici în sidebar (total șoferi, curse, disponibili)
+- [x] Dark theme Google Maps în Dispatcher
 - [x] Checkpoint final și livrare

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useCallback } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { trpc } from "@/lib/trpc";
 import { MapView } from "@/components/Map";
@@ -197,7 +197,7 @@ export default function Dispatcher() {
   useEffect(() => {
     if (!mapReady || !mapRef.current) return;
 
-    // Driver markers (green)
+    // Driver markers (green with arrow)
     driverLocations.forEach((d) => {
       let marker = driverMarkersRef.current.get(d.id);
       if (!marker) {
@@ -205,25 +205,44 @@ export default function Dispatcher() {
           map: mapRef.current!,
           icon: {
             path: google.maps.SymbolPath.FORWARD_CLOSED_ARROW,
-            scale: 6,
+            scale: 8,
             fillColor: "#22c55e",
             fillOpacity: 1,
             strokeColor: "#fff",
             strokeWeight: 2,
           },
           title: d.name,
+          zIndex: 100,
+          animation: google.maps.Animation.DROP,
         });
         const infoWindow = new google.maps.InfoWindow();
         marker.addListener("click", () => {
-          infoWindow.setContent(`<div style="font-weight:bold">${d.name}</div><div>Status: ${d.status}</div>`);
+          const statusColor = d.status === "available" ? "#22c55e" : "#f59e0b";
+          infoWindow.setContent(
+            `<div style="background:#1f2937;color:#fff;padding:12px;border-radius:8px;font-family:Arial,sans-serif;">
+              <div style="font-weight:bold;font-size:14px;margin-bottom:4px;">${d.name}</div>
+              <div style="font-size:12px;color:#9ca3af;margin-bottom:6px;">ID: ${d.id}</div>
+              <div style="display:inline-block;padding:4px 8px;background:${statusColor};color:#fff;border-radius:4px;font-size:11px;font-weight:bold;">${d.status.toUpperCase()}</div>
+            </div>`
+          );
           infoWindow.open(mapRef.current!, marker);
         });
         driverMarkersRef.current.set(d.id, marker);
       }
       marker.setPosition({ lat: d.lat, lng: d.lng });
+      // Update icon color based on status
+      const fillColor = d.status === "available" ? "#22c55e" : "#f59e0b";
+      marker.setIcon({
+        path: google.maps.SymbolPath.FORWARD_CLOSED_ARROW,
+        scale: 8,
+        fillColor: fillColor,
+        fillOpacity: 1,
+        strokeColor: "#fff",
+        strokeWeight: 2,
+      });
     });
 
-    // Client markers (red)
+    // Client markers (red circle)
     clientLocations.forEach((c) => {
       let marker = clientMarkersRef.current.get(c.id);
       if (!marker) {
@@ -231,18 +250,25 @@ export default function Dispatcher() {
           map: mapRef.current!,
           icon: {
             path: google.maps.SymbolPath.CIRCLE,
-            scale: 8,
+            scale: 10,
             fillColor: "#ef4444",
             fillOpacity: 1,
             strokeColor: "#fff",
-            strokeWeight: 2,
+            strokeWeight: 3,
           },
           title: c.phone,
+          zIndex: 50,
+          animation: google.maps.Animation.DROP,
         });
         const infoWindow = new google.maps.InfoWindow();
         marker.addListener("click", () => {
           infoWindow.setContent(
-            `<div style="font-weight:bold">${c.name || c.phone}</div><div>Cursă #${c.rideId}</div><button onclick="window.dispatchEvent(new CustomEvent('assignRide', {detail: ${c.rideId}}))" style="background:#3b82f6;color:white;padding:4px 8px;border:none;border-radius:4px;cursor:pointer;margin-top:4px">Asignează</button>`
+            `<div style="background:#1f2937;color:#fff;padding:12px;border-radius:8px;font-family:Arial,sans-serif;">
+              <div style="font-weight:bold;font-size:14px;margin-bottom:4px;">${c.name || "Client"}</div>
+              <div style="font-size:12px;color:#9ca3af;margin-bottom:4px;">${c.phone}</div>
+              <div style="font-size:11px;color:#9ca3af;margin-bottom:6px;">Cursă #${c.rideId}</div>
+              <button onclick="window.dispatchEvent(new CustomEvent('assignRide', {detail: ${c.rideId}})" style="background:#3b82f6;color:white;padding:6px 12px;border:none;border-radius:4px;cursor:pointer;font-size:12px;font-weight:bold;width:100%;">Asignează</button>
+            </div>`
           );
           infoWindow.open(mapRef.current!, marker);
         });
@@ -250,6 +276,13 @@ export default function Dispatcher() {
       }
       marker.setPosition({ lat: c.lat, lng: c.lng });
     });
+    // Fit bounds to show all markers
+    if ((driverLocations.size > 0 || clientLocations.size > 0) && mapRef.current) {
+      const bounds = new google.maps.LatLngBounds();
+      driverLocations.forEach((d) => bounds.extend({ lat: d.lat, lng: d.lng }));
+      clientLocations.forEach((c) => bounds.extend({ lat: c.lat, lng: c.lng }));
+      mapRef.current.fitBounds(bounds, 100);
+    }
   }, [mapReady, driverLocations, clientLocations]);
 
   // Listen for assign from map popup
@@ -266,8 +299,87 @@ export default function Dispatcher() {
   const handleMapReady = useCallback((map: google.maps.Map) => {
     mapRef.current = map;
     setMapReady(true);
-    map.setCenter({ lat: 44.4268, lng: 26.1025 }); // Bucharest
-    map.setZoom(12);
+    // Set initial view to Bucharest
+    map.setCenter({ lat: 44.4268, lng: 26.1025 });
+    map.setZoom(13);
+    // Add map styles for better visibility
+    map.setOptions({
+      styles: [
+        { elementType: "geometry", stylers: [{ color: "#242f3e" }] },
+        { elementType: "labels.text.stroke", stylers: [{ color: "#242f3e" }] },
+        { elementType: "labels.text.fill", stylers: [{ color: "#746855" }] },
+        {
+          featureType: "administrative.locality",
+          elementType: "labels.text.fill",
+          stylers: [{ color: "#d59563" }],
+        },
+        {
+          featureType: "poi",
+          elementType: "labels.text.fill",
+          stylers: [{ color: "#d59563" }],
+        },
+        {
+          featureType: "poi.park",
+          elementType: "geometry",
+          stylers: [{ color: "#263c3f" }],
+        },
+        {
+          featureType: "poi.park",
+          elementType: "labels.text.fill",
+          stylers: [{ color: "#6b9080" }],
+        },
+        {
+          featureType: "road",
+          elementType: "geometry",
+          stylers: [{ color: "#38414e" }],
+        },
+        {
+          featureType: "road",
+          elementType: "geometry.stroke",
+          stylers: [{ color: "#212a37" }],
+        },
+        {
+          featureType: "road.highway",
+          elementType: "geometry",
+          stylers: [{ color: "#746855" }],
+        },
+        {
+          featureType: "road.highway",
+          elementType: "geometry.stroke",
+          stylers: [{ color: "#1f2835" }],
+        },
+        {
+          featureType: "road.highway",
+          elementType: "labels.text.fill",
+          stylers: [{ color: "#f3751ff" }],
+        },
+        {
+          featureType: "transit",
+          elementType: "geometry",
+          stylers: [{ color: "#2f3948" }],
+        },
+        {
+          featureType: "transit.station",
+          elementType: "labels.text.fill",
+          stylers: [{ color: "#d59563" }],
+        },
+        {
+          featureType: "water",
+          elementType: "geometry",
+          stylers: [{ color: "#17263c" }],
+        },
+        {
+          featureType: "water",
+          elementType: "labels.text.fill",
+          stylers: [{ color: "#515c6d" }],
+        },
+        {
+          featureType: "water",
+          elementType: "labels.text.stroke",
+          stylers: [{ color: "#17263c" }],
+        },
+      ],
+    });
   }, []);
 
   if (loading) {
@@ -323,12 +435,28 @@ export default function Dispatcher() {
       <div className="flex flex-1 overflow-hidden">
         {/* Sidebar */}
         <div className="w-96 bg-gray-900 border-r border-gray-800 flex flex-col overflow-hidden">
+          {/* Stats Bar */}
+          <div className="px-3 py-3 border-b border-gray-800 grid grid-cols-3 gap-2">
+            <Card className="bg-gray-800 border-gray-700 p-2">
+              <div className="text-xs text-gray-400">Șoferi</div>
+              <div className="text-lg font-bold text-green-400">{driversQuery.data?.length || 0}</div>
+            </Card>
+            <Card className="bg-gray-800 border-gray-700 p-2">
+              <div className="text-xs text-gray-400">Curse</div>
+              <div className="text-lg font-bold text-yellow-400">{activeRidesQuery.data?.length || 0}</div>
+            </Card>
+            <Card className="bg-gray-800 border-gray-700 p-2">
+              <div className="text-xs text-gray-400">Disponibili</div>
+              <div className="text-lg font-bold text-blue-400">{availableDrivers.length}</div>
+            </Card>
+          </div>
+
           <Tabs defaultValue="rides" className="flex flex-col flex-1 overflow-hidden">
             <TabsList className="grid grid-cols-3 m-3 bg-gray-800">
               <TabsTrigger value="rides" className="data-[state=active]:bg-yellow-500 data-[state=active]:text-black text-xs">
                 <Car className="w-3 h-3 mr-1" /> Curse
                 {pendingRides.length > 0 && (
-                  <span className="ml-1 bg-red-500 text-white text-xs rounded-full w-4 h-4 flex items-center justify-center">
+                  <span className="ml-1 bg-red-600 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center font-bold animate-pulse">
                     {pendingRides.length}
                   </span>
                 )}
