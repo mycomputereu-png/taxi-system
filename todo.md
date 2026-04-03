@@ -55,3 +55,4 @@
 - [x] Panel statistici în sidebar (total șoferi, curse, disponibili)
 - [x] Dark theme Google Maps în Dispatcher
 - [x] Checkpoint final și livrare
+- [x] Fixa eroare Client OTP - validare și mesaje de eroare

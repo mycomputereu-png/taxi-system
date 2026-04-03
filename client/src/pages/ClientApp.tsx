@@ -354,7 +354,13 @@ export default function ClientApp() {
                 </div>
                 <Button
                   className="w-full bg-yellow-500 hover:bg-yellow-600 text-black font-bold text-lg py-6"
-                  onClick={() => sendOtpMut.mutate({ phone })}
+                  onClick={() => {
+                    if (phone.length < 10) {
+                      toast.error("Introdu un număr de telefon valid");
+                      return;
+                    }
+                    sendOtpMut.mutate({ phone });
+                  }}
                   disabled={sendOtpMut.isPending || phone.length < 10}
                 >
                   {sendOtpMut.isPending ? "Se trimite..." : "Trimite Cod OTP"}
@@ -380,7 +386,13 @@ export default function ClientApp() {
                 />
                 <Button
                   className="w-full bg-yellow-500 hover:bg-yellow-600 text-black font-bold text-lg py-6"
-                  onClick={() => verifyOtpMut.mutate({ phone, code: otp })}
+                  onClick={() => {
+                    if (otp.length !== 6) {
+                      toast.error("Codul trebuie să aibă 6 cifre");
+                      return;
+                    }
+                    verifyOtpMut.mutate({ phone, code: otp });
+                  }}
                   disabled={verifyOtpMut.isPending || otp.length !== 6}
                 >
                   {verifyOtpMut.isPending ? "Se verifică..." : "Verifică Codul"}
