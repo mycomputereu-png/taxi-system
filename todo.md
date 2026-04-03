@@ -56,3 +56,5 @@
 - [x] Dark theme Google Maps în Dispatcher
 - [x] Checkpoint final și livrare
 - [x] Fixa eroare Client OTP - validare și mesaje de eroare
+- [x] Fixa ReferenceError require is not defined - dynamic import socket.io-client
+- [x] Fixa Map container not found - adaugă check și loading state

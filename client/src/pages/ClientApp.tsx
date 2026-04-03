@@ -114,60 +114,66 @@ export default function ClientApp() {
   // Socket.IO auth and events
   useEffect(() => {
     if (!session) return;
-    const s = require("socket.io-client").io(window.location.origin, {
-      path: "/api/socket.io",
-      transports: ["websocket", "polling"],
-    });
+    
+    // Dynamic import for socket.io-client
+    import("socket.io-client").then(({ io }) => {
+      const s = io(window.location.origin, {
+        path: "/api/socket.io",
+        transports: ["websocket", "polling"],
+      });
 
-    s.on("connect", () => {
-      s.emit("auth:client", { token: session.token });
-    });
+      s.on("connect", () => {
+        s.emit("auth:client", { token: session.token });
+      });
 
-    s.on("ride:assigned", (data: any) => {
-      setRideStatus("assigned");
-      setDriverInfo(data.driver);
-      toast.success(`Șofer asignat: ${data.driver?.name || "Șofer"}!`);
-    });
+      s.on("ride:assigned", (data: any) => {
+        setRideStatus("assigned");
+        setDriverInfo(data.driver);
+        toast.success(`Șofer asignat: ${data.driver?.name || "Șofer"}!`);
+      });
 
-    s.on("ride:accepted", (data: any) => {
-      setRideStatus("accepted");
-      setDriverInfo(data.driver);
-      toast.success(`Șoferul ${data.driver?.name} a acceptat cursa!`);
-      if (data.driver?.id) {
-        s.emit("track:driver", { driverId: data.driver.id });
-      }
-    });
+      s.on("ride:accepted", (data: any) => {
+        setRideStatus("accepted");
+        setDriverInfo(data.driver);
+        toast.success(`Șoferul ${data.driver?.name} a acceptat cursa!`);
+        if (data.driver?.id) {
+          s.emit("track:driver", { driverId: data.driver.id });
+        }
+      });
 
-    s.on("ride:rejected", () => {
-      setRideStatus("rejected");
-      toast.error("Șoferul a refuzat cursa. Așteptați reasignare...");
-    });
+      s.on("ride:rejected", () => {
+        setRideStatus("rejected");
+        toast.error("Șoferul a refuzat cursa. Așteptați reasignare...");
+      });
 
-    s.on("ride:completed", () => {
-      setRideStatus("completed");
-      setDriverInfo(null);
-      clearDirections();
-      toast.success("Cursă finalizată! Mulțumim!");
-      setTimeout(() => setRideStatus("idle"), 5000);
-    });
+      s.on("ride:completed", () => {
+        setRideStatus("completed");
+        setDriverInfo(null);
+        clearDirections();
+        toast.success("Cursă finalizată! Mulțumim!");
+        setTimeout(() => setRideStatus("idle"), 5000);
+      });
 
-    s.on("ride:cancelled", () => {
-      setRideStatus("cancelled");
-      setDriverInfo(null);
-      clearDirections();
-      toast.info("Cursa a fost anulată");
-      setTimeout(() => setRideStatus("idle"), 3000);
-    });
+      s.on("ride:cancelled", () => {
+        setRideStatus("cancelled");
+        setDriverInfo(null);
+        clearDirections();
+        toast.info("Cursa a fost anulată");
+        setTimeout(() => setRideStatus("idle"), 3000);
+      });
 
-    s.on("driver:location:update", (data: { driverId: number; lat: number; lng: number }) => {
-      updateDriverMarker(data.lat, data.lng);
-      if (clientPos) {
-        drawRoute({ lat: data.lat, lng: data.lng }, clientPos);
-        calculateETA({ lat: data.lat, lng: data.lng }, clientPos);
-      }
-    });
+      s.on("driver:location:update", (data: { driverId: number; lat: number; lng: number }) => {
+        updateDriverMarker(data.lat, data.lng);
+        if (clientPos) {
+          drawRoute({ lat: data.lat, lng: data.lng }, clientPos);
+          calculateETA({ lat: data.lat, lng: data.lng }, clientPos);
+        }
+      });
 
-    return () => s.disconnect();
+      return () => s.disconnect();
+    }).catch(err => {
+      console.error("Failed to load socket.io-client:", err);
+    });
   }, [session]);
 
   // GPS tracking
@@ -292,6 +298,10 @@ export default function ClientApp() {
   }, []);
 
   const handleMapReady = useCallback((map: google.maps.Map) => {
+    if (!map) {
+      console.error("Map not initialized");
+      return;
+    }
     mapRef.current = map;
     setMapReady(true);
     // Try to center on user location
@@ -434,6 +444,11 @@ export default function ClientApp() {
 
       {/* Map */}
       <div className="flex-1 relative" style={{ minHeight: "60vh" }}>
+        {!mapReady && (
+          <div className="absolute inset-0 bg-gray-900 flex items-center justify-center z-10">
+            <span className="text-gray-400">Se încarcă hartă...</span>
+          </div>
+        )}
         <MapView onMapReady={handleMapReady} className="w-full h-full" />
 
         {/* Status overlay */}
