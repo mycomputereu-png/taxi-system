@@ -110,3 +110,11 @@
 - [x] Toate 9 teste Vitest trec
 - [x] Fixa TypeError: avgRating.toFixed is not a function în Dispatcher
 - [x] Adaugă null check pentru avgRating în modal profil client
+- [x] Adaugă timeout tracking în schema rides (assignedAt, acceptanceTimeoutAt)
+- [x] Implementează backend logic pentru automatic reassignment la 30s timeout
+- [x] Adaugă Socket.IO events pentru ride:timeout
+- [x] Adaugă UI countdown timer în driver app (30s -> 0s cu Clock icon)
+- [x] Adaugă ride:timeout listener în driver app
+- [x] Adaugă clearRideAcceptanceTimeout în acceptRide și rejectRide
+- [x] Teste Vitest (9 teste trec)
+- [x] TypeScript: No errors

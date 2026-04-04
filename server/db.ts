@@ -379,9 +379,11 @@ export async function getDriverActiveRide(driverId: number): Promise<Ride | unde
 export async function assignRide(rideId: number, driverId: number): Promise<void> {
   const db = await getDb();
   if (!db) return;
+  const now = new Date();
+  const timeoutAt = new Date(now.getTime() + 30 * 1000); // 30 seconds from now
   await db
     .update(rides)
-    .set({ driverId, status: "assigned" })
+    .set({ driverId, status: "assigned", assignedAt: now, acceptanceTimeoutAt: timeoutAt })
     .where(eq(rides.id, rideId));
   await db.update(drivers).set({ status: "busy" }).where(eq(drivers.id, driverId));
 }

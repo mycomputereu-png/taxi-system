@@ -38,7 +38,7 @@ import {
 import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
 import { protectedProcedure, publicProcedure, router } from "./_core/trpc";
-import { emitToClient, emitToDispatchers, emitToDriver } from "./socket";
+import { emitToClient, emitToDispatchers, emitToDriver, setRideAcceptanceTimeout, clearRideAcceptanceTimeout } from "./socket";
 
 // ─── Auth helpers ─────────────────────────────────────────────────────────────
 
@@ -128,6 +128,8 @@ export const appRouter = router({
         if (!driver) throw new TRPCError({ code: "UNAUTHORIZED" });
         const ride = await getRideById(input.rideId);
         if (!ride || ride.driverId !== driver.id) throw new TRPCError({ code: "FORBIDDEN" });
+        // Clear acceptance timeout since driver accepted
+        clearRideAcceptanceTimeout(input.rideId);
         await updateRideStatus(input.rideId, "accepted", { acceptedAt: new Date() });
         // Notify client
         emitToClient(ride.clientId, "ride:accepted", {
@@ -145,6 +147,8 @@ export const appRouter = router({
         if (!driver) throw new TRPCError({ code: "UNAUTHORIZED" });
         const ride = await getRideById(input.rideId);
         if (!ride || ride.driverId !== driver.id) throw new TRPCError({ code: "FORBIDDEN" });
+        // Clear acceptance timeout since driver rejected
+        clearRideAcceptanceTimeout(input.rideId);
         await updateRideStatus(input.rideId, "rejected");
         await updateDriverStatus(driver.id, "available");
         emitToClient(ride.clientId, "ride:rejected", { rideId: ride.id });
@@ -421,6 +425,18 @@ export const appRouter = router({
           driver: driver ? { id: driver.id, name: driver.name, phone: driver.phone } : null,
         });
         emitToDispatchers("ride:status", { rideId: ride.id, status: "assigned", driverId: input.driverId });
+        // Set 30-second acceptance timeout
+        setRideAcceptanceTimeout(input.rideId, async () => {
+          const currentRide = await getRideById(input.rideId);
+          if (currentRide && currentRide.status === "assigned") {
+            console.log(`[Timeout] Ride ${input.rideId} not accepted, resetting driver`);
+            await updateDriverStatus(input.driverId, "available");
+            await updateRideStatus(input.rideId, "pending", { driverId: null });
+            emitToDriver(input.driverId, "ride:timeout", { rideId: input.rideId });
+            emitToDispatchers("ride:timeout", { rideId: input.rideId, driverId: input.driverId });
+            emitToClient(ride.clientId, "ride:timeout", { rideId: input.rideId });
+          }
+        });
         return { success: true };
       }),
 

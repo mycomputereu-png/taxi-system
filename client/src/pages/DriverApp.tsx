@@ -53,6 +53,7 @@ export default function DriverApp() {
   const [showRatingModal, setShowRatingModal] = useState(false);
   const [ratingValue, setRatingValue] = useState(5);
   const [ratingComment, setRatingComment] = useState("");
+  const [acceptanceCountdown, setAcceptanceCountdown] = useState<number | null>(null); // 30, 29, ..., 0
 
   // Map
   const [mapReady, setMapReady] = useState(false);
@@ -189,7 +190,16 @@ export default function DriverApp() {
     s.on("ride:assigned", (data: AssignedRide) => {
       setPendingRide(data);
       setRideAccepted(false);
+      setAcceptanceCountdown(30); // Start 30-second countdown
       toast.info(`🚖 Cursă nouă asignată de la ${data.clientPhone || "client"}!`, { duration: 10000 });
+    });
+
+    s.on("ride:timeout", (data: { rideId: number }) => {
+      if (pendingRide?.rideId === data.rideId) {
+        setPendingRide(null);
+        setAcceptanceCountdown(null);
+        toast.error("⏱️ Timp expirat! Cursa a fost reasignată altui șofer.");
+      }
     });
 
     s.on("ride:cancelled", () => {
@@ -249,6 +259,23 @@ export default function DriverApp() {
       }
     };
   }, [session, rideAccepted, activeRide]);
+
+  // Countdown timer for ride acceptance
+  useEffect(() => {
+    if (acceptanceCountdown === null || acceptanceCountdown <= 0) return;
+    
+    const interval = setInterval(() => {
+      setAcceptanceCountdown((prev) => {
+        if (prev === null || prev <= 1) {
+          clearInterval(interval);
+          return null;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [acceptanceCountdown]);
 
   const updateDriverMarker = useCallback((lat: number, lng: number) => {
     if (!mapRef.current) return;
@@ -481,9 +508,17 @@ export default function DriverApp() {
         {pendingRide && !rideAccepted && (
           <div className="flex flex-col gap-3">
             <div className="bg-blue-900 border border-blue-600 rounded-xl p-4">
-              <div className="flex items-center gap-2 mb-3">
-                <div className="w-2 h-2 bg-blue-400 rounded-full animate-pulse"></div>
-                <p className="text-blue-300 font-semibold text-sm">Cursă nouă asignată!</p>
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-2">
+                  <div className="w-2 h-2 bg-blue-400 rounded-full animate-pulse"></div>
+                  <p className="text-blue-300 font-semibold text-sm">Cursă nouă asignată!</p>
+                </div>
+                {acceptanceCountdown !== null && (
+                  <div className="flex items-center gap-1 bg-red-900 px-3 py-1 rounded-full">
+                    <Clock className="w-4 h-4 text-red-300" />
+                    <span className="text-red-300 font-bold text-sm">{acceptanceCountdown}s</span>
+                  </div>
+                )}
               </div>
               <div className="flex items-start gap-3">
                 <div className="w-10 h-10 bg-red-700 rounded-full flex items-center justify-center text-white font-bold">

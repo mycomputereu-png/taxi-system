@@ -9,6 +9,9 @@ const dispatcherSockets = new Set<string>();
 const driverSockets = new Map<number, string>(); // driverId -> socketId
 const clientSockets = new Map<number, string>(); // clientId -> socketId
 
+// Track ride acceptance timeouts
+const rideTimeouts = new Map<number, NodeJS.Timeout>(); // rideId -> timeout
+
 export function initSocketIO(httpServer: HttpServer) {
   io = new SocketIOServer(httpServer, {
     cors: {
@@ -145,6 +148,29 @@ export function initSocketIO(httpServer: HttpServer) {
 
 export function getIO(): SocketIOServer | null {
   return io;
+}
+
+// ─── Timeout Management ──────────────────────────────────────────────────────────
+
+export function setRideAcceptanceTimeout(rideId: number, onTimeout: () => void) {
+  // Clear existing timeout if any
+  if (rideTimeouts.has(rideId)) {
+    clearTimeout(rideTimeouts.get(rideId));
+  }
+  // Set new 30-second timeout
+  const timeout = setTimeout(() => {
+    console.log(`[Socket.IO] Ride ${rideId} acceptance timeout - auto-reassigning`);
+    rideTimeouts.delete(rideId);
+    onTimeout();
+  }, 30000); // 30 seconds
+  rideTimeouts.set(rideId, timeout);
+}
+
+export function clearRideAcceptanceTimeout(rideId: number) {
+  if (rideTimeouts.has(rideId)) {
+    clearTimeout(rideTimeouts.get(rideId));
+    rideTimeouts.delete(rideId);
+  }
 }
 
 // ─── Emit helpers ─────────────────────────────────────────────────────────────

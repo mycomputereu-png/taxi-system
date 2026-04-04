@@ -98,6 +98,8 @@ export const rides = mysqlTable("rides", {
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
   acceptedAt: timestamp("acceptedAt"),
   completedAt: timestamp("completedAt"),
+  assignedAt: timestamp("assignedAt"), // when ride was assigned to driver
+  acceptanceTimeoutAt: timestamp("acceptanceTimeoutAt"), // when timeout expires (assignedAt + 30s)
 });
 
 export type Ride = typeof rides.$inferSelect;
