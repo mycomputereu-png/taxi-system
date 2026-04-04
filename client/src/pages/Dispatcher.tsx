@@ -181,26 +181,7 @@ export default function Dispatcher() {
       setClientLocations((prev) => {
         const next = new Map(prev);
         const existing = next.get(data.clientId);
-        if (existing) {
-          next.set(data.clientId, { ...existing, lat: data.lat, lng: data.lng });
-        } else {
-          next.set(data.clientId, {
-            id: data.clientId,
-            phone: "Unknown",
-            name: "Client",
-            lat: data.lat,
-            lng: data.lng,
-            rideId: null,
-          });
-        }
-        return next;
-      });
-    });
-
-    const unsubClientDisconnect = on("client:disconnect", (data: { clientId: number }) => {
-      setClientLocations((prev) => {
-        const next = new Map(prev);
-        next.delete(data.clientId);
+        if (existing) next.set(data.clientId, { ...existing, lat: data.lat, lng: data.lng });
         return next;
       });
     });
@@ -211,7 +192,6 @@ export default function Dispatcher() {
       unsubRideNew();
       unsubRideStatus();
       unsubClientLoc();
-      unsubClientDisconnect();
     };
   }, [isAuthenticated, emit, on, utils]);
 
