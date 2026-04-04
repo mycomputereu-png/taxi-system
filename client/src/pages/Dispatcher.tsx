@@ -738,7 +738,7 @@ export default function Dispatcher() {
                           <p className="text-white text-sm font-medium">{item.client.name || item.client.phone}</p>
                           <p className="text-gray-400 text-xs">Tel: {item.client.phone}</p>
                           <div className="flex items-center gap-1 mt-1">
-                            {item.avgRating ? (
+                            {typeof item.avgRating === 'number' && item.avgRating > 0 ? (
                               <>
                                 <span className="text-yellow-400 text-sm">★ {item.avgRating.toFixed(1)}</span>
                                 <span className="text-gray-500 text-xs">({item.ratingCount} rating-uri)</span>
@@ -749,11 +749,11 @@ export default function Dispatcher() {
                           </div>
                         </div>
                         <Badge className={`text-xs ${
-                          item.avgRating && item.avgRating >= 4 ? "bg-green-700" :
-                          item.avgRating && item.avgRating >= 3 ? "bg-yellow-700" :
-                          item.avgRating ? "bg-red-700" : "bg-gray-700"
+                          typeof item.avgRating === 'number' && item.avgRating >= 4 ? "bg-green-700" :
+                          typeof item.avgRating === 'number' && item.avgRating >= 3 ? "bg-yellow-700" :
+                          typeof item.avgRating === 'number' ? "bg-red-700" : "bg-gray-700"
                         }`}>
-                          {item.avgRating ? item.avgRating.toFixed(1) : "N/A"}
+                          {typeof item.avgRating === 'number' ? item.avgRating.toFixed(1) : "N/A"}
                         </Badge>
                       </div>
                     </CardContent>
@@ -855,7 +855,7 @@ export default function Dispatcher() {
                     </div>
                     <div>
                       <p className="text-gray-400 text-xs">Rating Mediu</p>
-                      <p className="text-lg font-bold text-yellow-400">{clientProfileQuery.data.avgRating ? clientProfileQuery.data.avgRating.toFixed(1) : "N/A"}/5</p>
+                      <p className="text-lg font-bold text-yellow-400">{typeof clientProfileQuery.data.avgRating === 'number' ? clientProfileQuery.data.avgRating.toFixed(1) : "N/A"}/5</p>
                     </div>
                   </div>
                 </div>
