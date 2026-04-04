@@ -63,3 +63,5 @@
 - [x] Fixa buton Cheamă Taxi - adaugă fallback GPS și buton test locație simulată
 - [x] Rearanjare taburi Dispatcher: Curse în așteptare → Curse active → Șoferi online
 - [x] Adaugă legendă hartă cu buline colorate: șoferi disponibili (verde), șoferi ocupați (albastru), clienți în așteptare (roșu)
+- [x] Adaugă hartă Google Maps pe aplicația Șofer cu locația în timp real
+- [x] Adaugă legendă hartă Șofer (locația mea portocaliu, client roșu)

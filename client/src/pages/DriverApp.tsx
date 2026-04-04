@@ -405,6 +405,19 @@ export default function DriverApp() {
       <div className="flex-1 relative" style={{ minHeight: "55vh" }}>
         <MapView onMapReady={handleMapReady} className="w-full h-full" />
 
+        {/* Map Legend */}
+        <div className="absolute top-4 right-4 bg-gray-900 bg-opacity-90 rounded-lg p-3 text-xs text-white border border-gray-700">
+          <div className="font-semibold mb-2 text-yellow-400">Legendă</div>
+          <div className="flex items-center gap-2 mb-2">
+            <div className="w-3 h-3 bg-amber-500 rounded-full"></div>
+            <span>Locația mea</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="w-3 h-3 bg-red-500 rounded-full"></div>
+            <span>Client</span>
+          </div>
+        </div>
+
         {rideAccepted && estimatedArrival && (
           <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-blue-900 bg-opacity-95 rounded-xl px-4 py-2 flex items-center gap-2 shadow-lg">
             <Clock className="w-4 h-4 text-blue-300" />
