@@ -119,3 +119,4 @@
 - [x] Teste Vitest (9 teste trec)
 - [x] TypeScript: No errors
 - [x] BUG FIX: Butonul "Cheamă taxi" - adaug coloane rides în migrație (assignedAt, acceptanceTimeoutAt)
+- [x] BUG FIX: Harta pe aplicația șoferului - fix container height cu delay și h-screen

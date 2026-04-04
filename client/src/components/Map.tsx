@@ -147,15 +147,31 @@ export function MapView({
 
   const init = usePersistFn(async () => {
     try {
+      console.log("[Map] Initializing MapView...");
       await loadMapScript();
+      console.log("[Map] Google Maps script loaded");
+      
       if (!mapContainer.current) {
-        console.error("Map container not found");
+        console.error("[Map] Container not found");
         return;
       }
+      
+      // Wait for container to have dimensions
+      let attempts = 0;
+      while (mapContainer.current.offsetHeight === 0 && attempts < 50) {
+        await new Promise(resolve => setTimeout(resolve, 50));
+        attempts++;
+      }
+      
+      const rect = mapContainer.current.getBoundingClientRect();
+      console.log("[Map] Container dimensions:", { width: rect.width, height: rect.height, offsetWidth: mapContainer.current.offsetWidth, offsetHeight: mapContainer.current.offsetHeight, attempts });
+      
       if (!window.google?.maps) {
-        console.error("Google Maps API not available after loading script");
+        console.error("[Map] Google Maps API not available after loading script");
         return;
       }
+      
+      console.log("[Map] Creating map instance...");
       map.current = new window.google.maps.Map(mapContainer.current, {
         zoom: initialZoom,
         center: initialCenter,
@@ -165,11 +181,14 @@ export function MapView({
         streetViewControl: true,
         mapId: "DEMO_MAP_ID",
       });
+      console.log("[Map] Map instance created successfully");
+      
       if (onMapReady) {
+        console.log("[Map] Calling onMapReady callback");
         onMapReady(map.current);
       }
     } catch (error) {
-      console.error("Failed to initialize map:", error);
+      console.error("[Map] Failed to initialize map:", error);
     }
   });
 

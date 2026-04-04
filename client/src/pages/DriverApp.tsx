@@ -448,7 +448,7 @@ export default function DriverApp() {
   // ─── Main Driver App ──────────────────────────────────────────────────────
 
   return (
-    <div className="min-h-screen bg-gray-950 flex flex-col">
+    <div className="h-screen bg-gray-950 flex flex-col">
       {/* Header */}
       <header className="bg-gray-900 border-b border-gray-800 px-4 py-3 flex items-center justify-between">
         <div className="flex items-center gap-2">
@@ -471,7 +471,7 @@ export default function DriverApp() {
       </header>
 
       {/* Map */}
-      <div className="flex-1 relative bg-gray-800" style={{ minHeight: "55vh", height: "100%" }}>
+      <div className="flex-1 relative bg-gray-800 overflow-hidden">
         <MapView onMapReady={handleMapReady} className="w-full h-full" />
 
         {/* Map Legend */}
