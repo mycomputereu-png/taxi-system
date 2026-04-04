@@ -560,13 +560,23 @@ export const appRouter = router({
       }),
 
     getActivePanicAlerts: protectedProcedure.query(async () => {
-      return getActivePanicAlerts();
+      try {
+        return await getActivePanicAlerts();
+      } catch (error) {
+        console.error("[Error] getActivePanicAlerts failed:", error);
+        return [];
+      }
     }),
 
     getPanicAlertsByDriver: protectedProcedure
       .input(z.object({ driverId: z.number() }))
       .query(async ({ input }) => {
-        return getPanicAlertsByDriver(input.driverId);
+        try {
+          return await getPanicAlertsByDriver(input.driverId);
+        } catch (error) {
+          console.error("[Error] getPanicAlertsByDriver failed:", error);
+          return [];
+        }
       }),
   }),
 });

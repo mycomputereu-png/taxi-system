@@ -179,3 +179,8 @@
 - [x] Identify the source of incorrect clientId values - FIXED: No disconnect handler to remove markers
 - [x] Fix the issue by filtering or validating client markers - FIXED: Added client:disconnect listener and broadcast
 - [x] Test and verify only real clients appear - FIXED: Markers now removed when clients disconnect
+
+
+## 🐛 BUG: panic_alerts query error on dispatcher page
+- [x] Add error handling to getActivePanicAlerts procedure - FIXED: Added try-catch blocks
+- [x] Test dispatcher page loads without errors - FIXED: Dispatcher page now loads successfully
