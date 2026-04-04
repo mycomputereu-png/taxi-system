@@ -1,4 +1,4 @@
-import { and, desc, eq, ne } from "drizzle-orm";
+import { eq, and, ne, desc, inArray, getTableColumns } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import {
   Client,
@@ -332,12 +332,31 @@ export async function getPendingRides(): Promise<Ride[]> {
   return db.select().from(rides).where(eq(rides.status, "pending")).orderBy(desc(rides.createdAt));
 }
 
-export async function getActiveRides(): Promise<Ride[]> {
+export async function getActiveRides(): Promise<any[]> {
   const db = await getDb();
   if (!db) return [];
   return db
-    .select()
+    .select({
+      ...getTableColumns(rides),
+      client: {
+        id: clients.id,
+        phone: clients.phone,
+        name: clients.name,
+        currentLat: clients.currentLat,
+        currentLng: clients.currentLng,
+      },
+      driver: {
+        id: drivers.id,
+        name: drivers.name,
+        phone: drivers.phone,
+        username: drivers.username,
+        carPlate: drivers.carPlate,
+        carBrand: drivers.carBrand,
+      },
+    })
     .from(rides)
+    .leftJoin(clients, eq(rides.clientId, clients.id))
+    .leftJoin(drivers, eq(rides.driverId, drivers.id))
     .where(
       and(
         ne(rides.status, "completed"),

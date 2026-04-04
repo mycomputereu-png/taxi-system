@@ -201,3 +201,12 @@
 - [x] Display client name if available
 - [x] Add "Nou" badge to pending rides
 - [x] Test: new ride appears with full client info on right panel
+
+
+## 🐛 BUG FIX: Client phone number not appearing in dispatcher ride cards
+- [x] Identified: getActiveRides() was not including client data
+- [x] Added LEFT JOIN with clients table in getActiveRides()
+- [x] Added LEFT JOIN with drivers table for driver info
+- [x] Included client phone, name, and location in query result
+- [x] Included driver name, phone, and vehicle info in query result
+- [x] Verified server returns enriched ride data with client/driver objects
