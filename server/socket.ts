@@ -93,11 +93,7 @@ export function initSocketIO(httpServer: HttpServer) {
 
     socket.on("location:client", async (data: { lat: number; lng: number }) => {
       const clientId = (socket as any).clientId;
-      if (!clientId) {
-        console.log(`[Socket.IO] location:client received but clientId not set for socket ${socket.id}`);
-        return;
-      }
-      console.log(`[Socket.IO] Client ${clientId} location update: ${data.lat}, ${data.lng}`);
+      if (!clientId) return;
       await updateClientLocation(clientId, String(data.lat), String(data.lng));
       // Broadcast to dispatchers
       io?.to("dispatchers").emit("client:location", {

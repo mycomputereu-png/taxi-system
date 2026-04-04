@@ -37,11 +37,7 @@ export default function ClientApp() {
   const { emit, on } = useSocket();
 
   // Auth state
-  const [session, setSession] = useState<ClientSession | null>(() => {
-    const s = loadSession();
-    console.log("[ClientApp] Loaded session:", s);
-    return s;
-  });
+  const [session, setSession] = useState<ClientSession | null>(() => loadSession());
   const [phone, setPhone] = useState("");
   const [otp, setOtp] = useState("");
   const [otpSent, setOtpSent] = useState(false);
@@ -80,8 +76,6 @@ export default function ClientApp() {
       const s: ClientSession = { token: data.token, clientId: data.client.id, phone: data.client.phone };
       saveSession(s);
       setSession(s);
-      // Emit Socket.IO auth after session is saved
-      emit("auth:client", { token: s.token });
       toast.success("Autentificat cu succes!");
     },
     onError: (e) => toast.error(e.message),
@@ -98,7 +92,138 @@ export default function ClientApp() {
     onError: (e) => toast.error(e.message),
   });
 
-  // Callback functions (must be declared before useEffect)
+  const cancelRideMut = trpc.clientApp.cancelRide.useMutation({
+    onSuccess: () => {
+      setRideStatus("idle");
+      setRideId(null);
+      setDriverInfo(null);
+      clearDirections();
+      toast.info("Cursă anulată");
+    },
+  });
+
+  const activeRideQuery = trpc.clientApp.getActiveRide.useQuery(
+    { token: session?.token ?? "" },
+    { enabled: !!session, refetchInterval: 10000 }
+  );
+
+  // Sync active ride from server
+  useEffect(() => {
+    if (!activeRideQuery.data) return;
+    const ride = activeRideQuery.data;
+    if (ride?.id) {
+      setRideId(ride.id);
+      setRideStatus(ride.status as RideStatus);
+      if (ride.driver) setDriverInfo(ride.driver);
+      if (ride.estimatedArrival) setEstimatedArrival(ride.estimatedArrival);
+    }
+  }, [activeRideQuery.data]);
+
+  // Socket.IO auth and events
+  useEffect(() => {
+    if (!session) return;
+    
+    // Dynamic import for socket.io-client
+    import("socket.io-client").then(({ io }) => {
+      const s = io(window.location.origin, {
+        path: "/api/socket.io",
+        transports: ["websocket", "polling"],
+      });
+
+      s.on("connect", () => {
+        s.emit("auth:client", { token: session.token });
+      });
+
+      s.on("ride:assigned", (data: any) => {
+        setRideStatus("assigned");
+        setDriverInfo(data.driver);
+        toast.success(`Șofer asignat: ${data.driver?.name || "Șofer"}!`);
+      });
+
+      s.on("ride:accepted", (data: any) => {
+        setRideStatus("accepted");
+        setDriverInfo(data.driver);
+        toast.success(`Șoferul ${data.driver?.name} a acceptat cursa!`);
+        if (data.driver?.id) {
+          s.emit("track:driver", { driverId: data.driver.id });
+        }
+      });
+
+      s.on("ride:rejected", () => {
+        setRideStatus("rejected");
+        toast.error("Șoferul a refuzat cursa. Așteptați reasignare...");
+      });
+
+      s.on("ride:completed", () => {
+        setRideStatus("completed");
+        setDriverInfo(null);
+        clearDirections();
+        toast.success("Cursă finalizată! Mulțumim!");
+        setTimeout(() => setRideStatus("idle"), 5000);
+      });
+
+      s.on("ride:cancelled", () => {
+        setRideStatus("cancelled");
+        setDriverInfo(null);
+        clearDirections();
+        toast.info("Cursa a fost anulată");
+        setTimeout(() => setRideStatus("idle"), 3000);
+      });
+
+      s.on("driver:location:update", (data: { driverId: number; lat: number; lng: number }) => {
+        updateDriverMarker(data.lat, data.lng);
+        if (clientPos) {
+          drawRoute({ lat: data.lat, lng: data.lng }, clientPos);
+          calculateETA({ lat: data.lat, lng: data.lng }, clientPos);
+        }
+      });
+
+      return () => s.disconnect();
+    }).catch(err => {
+      console.error("Failed to load socket.io-client:", err);
+    });
+  }, [session]);
+
+  // GPS tracking
+  useEffect(() => {
+    if (!session) return;
+
+    // Try real geolocation first
+    if (navigator.geolocation) {
+      locationWatchRef.current = navigator.geolocation.watchPosition(
+        (pos) => {
+          const { latitude: lat, longitude: lng } = pos.coords;
+          setClientPos({ lat, lng });
+          emit("location:client", { lat, lng });
+          updateClientMarker(lat, lng);
+        },
+        (err) => {
+          console.warn("GPS error:", err);
+          // Fallback: use default location (Bucharest center) for demo
+          const defaultLat = 44.4268;
+          const defaultLng = 26.1025;
+          setClientPos({ lat: defaultLat, lng: defaultLng });
+          emit("location:client", { lat: defaultLat, lng: defaultLng });
+          updateClientMarker(defaultLat, defaultLng);
+        },
+        { enableHighAccuracy: true, maximumAge: 5000, timeout: 10000 }
+      );
+    } else {
+      // Fallback if geolocation not available
+      const defaultLat = 44.4268;
+      const defaultLng = 26.1025;
+      setClientPos({ lat: defaultLat, lng: defaultLng });
+      emit("location:client", { lat: defaultLat, lng: defaultLng });
+      updateClientMarker(defaultLat, defaultLng);
+    }
+
+    return () => {
+      if (locationWatchRef.current !== null) {
+        navigator.geolocation?.clearWatch(locationWatchRef.current);
+      }
+    };
+  }, [session, emit]);
+
   const updateClientMarker = useCallback((lat: number, lng: number) => {
     if (!mapRef.current) return;
     if (!clientMarkerRef.current) {
@@ -197,132 +322,6 @@ export default function ClientApp() {
     setEstimatedArrival(null);
   }, []);
 
-  const cancelRideMut = trpc.clientApp.cancelRide.useMutation({
-    onSuccess: () => {
-      setRideStatus("idle");
-      setRideId(null);
-      setDriverInfo(null);
-      clearDirections();
-      toast.info("Cursă anulată");
-    },
-  });
-
-  const activeRideQuery = trpc.clientApp.getActiveRide.useQuery(
-    { token: session?.token ?? "" },
-    { enabled: !!session, refetchInterval: 10000 }
-  );
-
-  // Sync active ride from server
-  useEffect(() => {
-    if (!activeRideQuery.data) return;
-    const ride = activeRideQuery.data;
-    if (ride?.id) {
-      setRideId(ride.id);
-      setRideStatus(ride.status as RideStatus);
-      if (ride.driver) setDriverInfo(ride.driver);
-      if (ride.estimatedArrival) setEstimatedArrival(ride.estimatedArrival);
-    }
-  }, [activeRideQuery.data]);
-
-  // Socket.IO auth is now emitted in verifyOtpMut.onSuccess
-
-  // Socket.IO event listeners
-  useEffect(() => {
-    on("ride:assigned", (data: any) => {
-      setRideStatus("assigned");
-      setDriverInfo(data.driver);
-      toast.success(`Șofer asignat: ${data.driver?.name || "Șofer"}!`);
-    });
-  }, [on]);
-
-  useEffect(() => {
-    on("ride:accepted", (data: any) => {
-      setRideStatus("accepted");
-      setDriverInfo(data.driver);
-      toast.success(`Șoferul ${data.driver?.name} a acceptat cursa!`);
-      if (data.driver?.id) {
-        emit("track:driver", { driverId: data.driver.id });
-      }
-    });
-  }, [on, emit]);
-
-  useEffect(() => {
-    on("ride:rejected", () => {
-      setRideStatus("rejected");
-      toast.error("Șoferul a refuzat cursa. Așteptați reasignare...");
-    });
-  }, [on]);
-
-  useEffect(() => {
-    on("ride:completed", () => {
-      setRideStatus("completed");
-      setDriverInfo(null);
-      clearDirections();
-      toast.success("Cursă finalizată! Mulțumim!");
-      setTimeout(() => setRideStatus("idle"), 5000);
-    });
-  }, [on]);
-
-  useEffect(() => {
-    on("ride:cancelled", () => {
-      setRideStatus("cancelled");
-      setDriverInfo(null);
-      clearDirections();
-      toast.info("Cursa a fost anulată");
-      setTimeout(() => setRideStatus("idle"), 3000);
-    });
-  }, [on]);
-
-  useEffect(() => {
-    on("driver:location:update", (data: { driverId: number; lat: number; lng: number }) => {
-      updateDriverMarker(data.lat, data.lng);
-      if (clientPos) {
-        drawRoute({ lat: data.lat, lng: data.lng }, clientPos);
-        calculateETA({ lat: data.lat, lng: data.lng }, clientPos);
-      }
-    });
-  }, [on, clientPos, updateDriverMarker, drawRoute, calculateETA]);
-
-  // GPS tracking
-  useEffect(() => {
-    if (!session) return;
-
-    // Try real geolocation first
-    if (navigator.geolocation) {
-      locationWatchRef.current = navigator.geolocation.watchPosition(
-        (pos) => {
-          const { latitude: lat, longitude: lng } = pos.coords;
-          setClientPos({ lat, lng });
-          emit("location:client", { lat, lng });
-          updateClientMarker(lat, lng);
-        },
-        (err) => {
-          console.warn("GPS error:", err);
-          // Fallback: use default location (Bucharest center) for demo
-          const defaultLat = 44.4268;
-          const defaultLng = 26.1025;
-          setClientPos({ lat: defaultLat, lng: defaultLng });
-          emit("location:client", { lat: defaultLat, lng: defaultLng });
-          updateClientMarker(defaultLat, defaultLng);
-        },
-        { enableHighAccuracy: true, maximumAge: 5000, timeout: 10000 }
-      );
-    } else {
-      // Fallback if geolocation not available
-      const defaultLat = 44.4268;
-      const defaultLng = 26.1025;
-      setClientPos({ lat: defaultLat, lng: defaultLng });
-      emit("location:client", { lat: defaultLat, lng: defaultLng });
-      updateClientMarker(defaultLat, defaultLng);
-    }
-
-    return () => {
-      if (locationWatchRef.current !== null) {
-        navigator.geolocation?.clearWatch(locationWatchRef.current);
-      }
-    };
-  }, [session, emit]);
-
   const handleMapReady = useCallback((map: google.maps.Map) => {
     if (!map) {
       console.error("Map not initialized");
@@ -330,26 +329,18 @@ export default function ClientApp() {
     }
     mapRef.current = map;
     setMapReady(true);
-    
-    // Center on client position if available
-    if (clientPos) {
-      map.setCenter({ lat: clientPos.lat, lng: clientPos.lng });
-      map.setZoom(15);
-      updateClientMarker(clientPos.lat, clientPos.lng);
-    } else {
-      // Try to center on user location
-      navigator.geolocation?.getCurrentPosition(
-        (pos) => {
-          map.setCenter({ lat: pos.coords.latitude, lng: pos.coords.longitude });
-          map.setZoom(15);
-        },
-        () => {
-          map.setCenter({ lat: 44.4268, lng: 26.1025 });
-          map.setZoom(13);
-        }
-      );
-    }
-  }, [clientPos, updateClientMarker]);
+    // Try to center on user location
+    navigator.geolocation?.getCurrentPosition(
+      (pos) => {
+        map.setCenter({ lat: pos.coords.latitude, lng: pos.coords.longitude });
+        map.setZoom(15);
+      },
+      () => {
+        map.setCenter({ lat: 44.4268, lng: 26.1025 });
+        map.setZoom(13);
+      }
+    );
+  }, []);
 
   const handleCallTaxi = () => {
     if (!session || !clientPos) {
@@ -429,9 +420,9 @@ export default function ClientApp() {
                   Introdu codul trimis la <span className="text-white font-semibold">{phone}</span>
                 </p>
                 {devOtp && (
-                  <div className="bg-blue-900 border-2 border-blue-500 rounded-lg p-4 text-center">
-                    <p className="text-blue-300 text-sm mb-2 font-semibold">Cod demo (nu trimite SMS real):</p>
-                    <p className="text-white font-mono text-4xl font-bold tracking-widest bg-blue-950 rounded p-3">{devOtp}</p>
+                  <div className="bg-blue-900 border border-blue-600 rounded-lg p-3 text-center">
+                    <p className="text-blue-300 text-xs mb-1">Cod demo (nu trimite SMS real):</p>
+                    <p className="text-white font-mono text-2xl font-bold tracking-widest">{devOtp}</p>
                   </div>
                 )}
                 <Input
@@ -474,9 +465,9 @@ export default function ClientApp() {
   const isRideActive = ["pending", "assigned", "accepted", "in_progress"].includes(rideStatus);
 
   return (
-    <div className="h-screen bg-gray-950 flex flex-col">
+    <div className="min-h-screen bg-gray-950 flex flex-col">
       {/* Header */}
-      <header className="bg-gray-900 border-b border-gray-800 px-4 py-3 flex items-center justify-between flex-shrink-0">
+      <header className="bg-gray-900 border-b border-gray-800 px-4 py-3 flex items-center justify-between">
         <div className="flex items-center gap-2">
           <span className="text-xl">🚖</span>
           <span className="text-yellow-400 font-bold">Taxi App</span>
@@ -490,7 +481,7 @@ export default function ClientApp() {
       </header>
 
       {/* Map */}
-      <div className="flex-1 relative w-full overflow-hidden">
+      <div className="flex-1 relative" style={{ minHeight: "60vh" }}>
         {!mapReady && (
           <div className="absolute inset-0 bg-gray-900 flex items-center justify-center z-10">
             <span className="text-gray-400">Se încarcă hartă...</span>

@@ -244,7 +244,7 @@ export const appRouter = router({
         const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
         await createOtp(input.phone, code, expiresAt);
         console.log(`[OTP] Phone: ${input.phone}, Code: ${code}`);
-        return { success: true, code };
+        return { success: true };
       }),
 
     verifyOtp: publicProcedure
