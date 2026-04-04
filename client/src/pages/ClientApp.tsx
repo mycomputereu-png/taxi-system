@@ -98,6 +98,105 @@ export default function ClientApp() {
     onError: (e) => toast.error(e.message),
   });
 
+  // Callback functions (must be declared before useEffect)
+  const updateClientMarker = useCallback((lat: number, lng: number) => {
+    if (!mapRef.current) return;
+    if (!clientMarkerRef.current) {
+      clientMarkerRef.current = new google.maps.Marker({
+        map: mapRef.current,
+        icon: {
+          path: google.maps.SymbolPath.CIRCLE,
+          scale: 10,
+          fillColor: "#3b82f6",
+          fillOpacity: 1,
+          strokeColor: "#fff",
+          strokeWeight: 3,
+        },
+        title: "Locația mea",
+        zIndex: 100,
+      });
+    }
+    clientMarkerRef.current.setPosition({ lat, lng });
+    mapRef.current.panTo({ lat, lng });
+  }, []);
+
+  const updateDriverMarker = useCallback((lat: number, lng: number) => {
+    if (!mapRef.current) return;
+    if (!driverMarkerRef.current) {
+      driverMarkerRef.current = new google.maps.Marker({
+        map: mapRef.current,
+        icon: {
+          path: google.maps.SymbolPath.FORWARD_CLOSED_ARROW,
+          scale: 7,
+          fillColor: "#f59e0b",
+          fillOpacity: 1,
+          strokeColor: "#fff",
+          strokeWeight: 2,
+        },
+        title: "Șoferul tău",
+        zIndex: 200,
+      });
+    }
+    driverMarkerRef.current.setPosition({ lat, lng });
+  }, []);
+
+  const drawRoute = useCallback((from: { lat: number; lng: number }, to: { lat: number; lng: number }) => {
+    if (!mapRef.current) return;
+    if (!directionsRendererRef.current) {
+      directionsRendererRef.current = new google.maps.DirectionsRenderer({
+        map: mapRef.current,
+        suppressMarkers: true,
+        polylineOptions: {
+          strokeColor: "#3b82f6",
+          strokeWeight: 5,
+          strokeOpacity: 0.8,
+        },
+      });
+    }
+    const service = new google.maps.DirectionsService();
+    service.route(
+      {
+        origin: from,
+        destination: to,
+        travelMode: google.maps.TravelMode.DRIVING,
+      },
+      (result, status) => {
+        if (status === "OK" && result) {
+          directionsRendererRef.current!.setDirections(result);
+        }
+      }
+    );
+  }, []);
+
+  const calculateETA = useCallback((from: { lat: number; lng: number }, to: { lat: number; lng: number }) => {
+    const service = new google.maps.DistanceMatrixService();
+    service.getDistanceMatrix(
+      {
+        origins: [from],
+        destinations: [to],
+        travelMode: google.maps.TravelMode.DRIVING,
+      },
+      (result, status) => {
+        if (status === "OK" && result?.rows[0]?.elements[0]?.duration) {
+          const minutes = Math.ceil(result.rows[0].elements[0].duration.value / 60);
+          setEstimatedArrival(minutes);
+        }
+      }
+    );
+  }, []);
+
+  const clearDirections = useCallback(() => {
+    if (directionsRendererRef.current) {
+      directionsRendererRef.current.setMap(null);
+      directionsRendererRef.current = null;
+    }
+    if (driverMarkerRef.current) {
+      driverMarkerRef.current.setMap(null);
+      driverMarkerRef.current = null;
+    }
+    setEstimatedArrival(null);
+  }, []);
+
   const cancelRideMut = trpc.clientApp.cancelRide.useMutation({
     onSuccess: () => {
       setRideStatus("idle");
@@ -223,104 +322,6 @@ export default function ClientApp() {
       }
     };
   }, [session, emit]);
-
-  const updateClientMarker = useCallback((lat: number, lng: number) => {
-    if (!mapRef.current) return;
-    if (!clientMarkerRef.current) {
-      clientMarkerRef.current = new google.maps.Marker({
-        map: mapRef.current,
-        icon: {
-          path: google.maps.SymbolPath.CIRCLE,
-          scale: 10,
-          fillColor: "#3b82f6",
-          fillOpacity: 1,
-          strokeColor: "#fff",
-          strokeWeight: 3,
-        },
-        title: "Locația mea",
-        zIndex: 100,
-      });
-    }
-    clientMarkerRef.current.setPosition({ lat, lng });
-    mapRef.current.panTo({ lat, lng });
-  }, []);
-
-  const updateDriverMarker = useCallback((lat: number, lng: number) => {
-    if (!mapRef.current) return;
-    if (!driverMarkerRef.current) {
-      driverMarkerRef.current = new google.maps.Marker({
-        map: mapRef.current,
-        icon: {
-          path: google.maps.SymbolPath.FORWARD_CLOSED_ARROW,
-          scale: 7,
-          fillColor: "#f59e0b",
-          fillOpacity: 1,
-          strokeColor: "#fff",
-          strokeWeight: 2,
-        },
-        title: "Șoferul tău",
-        zIndex: 200,
-      });
-    }
-    driverMarkerRef.current.setPosition({ lat, lng });
-  }, []);
-
-  const drawRoute = useCallback((from: { lat: number; lng: number }, to: { lat: number; lng: number }) => {
-    if (!mapRef.current) return;
-    if (!directionsRendererRef.current) {
-      directionsRendererRef.current = new google.maps.DirectionsRenderer({
-        map: mapRef.current,
-        suppressMarkers: true,
-        polylineOptions: {
-          strokeColor: "#3b82f6",
-          strokeWeight: 5,
-          strokeOpacity: 0.8,
-        },
-      });
-    }
-    const service = new google.maps.DirectionsService();
-    service.route(
-      {
-        origin: from,
-        destination: to,
-        travelMode: google.maps.TravelMode.DRIVING,
-      },
-      (result, status) => {
-        if (status === "OK" && result) {
-          directionsRendererRef.current!.setDirections(result);
-        }
-      }
-    );
-  }, []);
-
-  const calculateETA = useCallback((from: { lat: number; lng: number }, to: { lat: number; lng: number }) => {
-    const service = new google.maps.DistanceMatrixService();
-    service.getDistanceMatrix(
-      {
-        origins: [from],
-        destinations: [to],
-        travelMode: google.maps.TravelMode.DRIVING,
-      },
-      (result, status) => {
-        if (status === "OK" && result?.rows[0]?.elements[0]?.duration) {
-          const minutes = Math.ceil(result.rows[0].elements[0].duration.value / 60);
-          setEstimatedArrival(minutes);
-        }
-      }
-    );
-  }, []);
-
-  const clearDirections = useCallback(() => {
-    if (directionsRendererRef.current) {
-      directionsRendererRef.current.setMap(null);
-      directionsRendererRef.current = null;
-    }
-    if (driverMarkerRef.current) {
-      driverMarkerRef.current.setMap(null);
-      driverMarkerRef.current = null;
-    }
-    setEstimatedArrival(null);
-  }, []);
 
   const handleMapReady = useCallback((map: google.maps.Map) => {
     if (!map) {
