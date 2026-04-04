@@ -169,7 +169,7 @@ export default function DriverApp() {
     onError: (e) => toast.error(e.message),
   });
 
-  const activeRideQuery = trpc.clientApp.getActiveRide.useQuery(
+  const activeRideQuery = trpc.driver.getActiveRide.useQuery(
     { token: session?.token ?? "" },
     { enabled: !!session, refetchInterval: 15000 }
   );

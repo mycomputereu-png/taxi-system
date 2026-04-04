@@ -202,6 +202,14 @@ export const appRouter = router({
         return { success: true };
       }),
 
+    getActiveRide: publicProcedure
+      .input(z.object({ token: z.string() }))
+      .query(async ({ input }) => {
+        const driver = await getDriverByToken(input.token);
+        if (!driver) throw new TRPCError({ code: "UNAUTHORIZED" });
+        return getDriverActiveRide(driver.id);
+      }),
+
     submitRating: publicProcedure
       .input(
         z.object({

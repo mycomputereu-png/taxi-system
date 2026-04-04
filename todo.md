@@ -160,3 +160,8 @@
 - [x] Fix GPS location undefined (clientLat, clientLng) when requesting ride - FIXED: changed lat/lng to clientLat/clientLng
 - [x] Ensure GPS location is captured before ride request - GPS is captured via watchPosition
 - [x] Test ride request with valid location - Ready to test
+
+
+## BUG: Driver Rating Submission Fails
+- [x] Fix clientId undefined when submitting rating from driver app - FIXED: added driver.getActiveRide procedure
+- [x] Ensure activeRide has clientId before submitting rating - Now using driver-specific query
