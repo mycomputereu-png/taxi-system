@@ -454,16 +454,16 @@ export default function Dispatcher() {
           {/* Stats Bar */}
           <div className="px-3 py-3 border-b border-gray-800 grid grid-cols-3 gap-2">
             <Card className="bg-gray-800 border-gray-700 p-2">
+              <div className="text-xs text-gray-400">Așteptare</div>
+              <div className="text-lg font-bold text-red-400">{pendingRides.length}</div>
+            </Card>
+            <Card className="bg-gray-800 border-gray-700 p-2">
+              <div className="text-xs text-gray-400">Active</div>
+              <div className="text-lg font-bold text-blue-400">{assignedRides.length}</div>
+            </Card>
+            <Card className="bg-gray-800 border-gray-700 p-2">
               <div className="text-xs text-gray-400">Șoferi</div>
               <div className="text-lg font-bold text-green-400">{driversQuery.data?.length || 0}</div>
-            </Card>
-            <Card className="bg-gray-800 border-gray-700 p-2">
-              <div className="text-xs text-gray-400">Curse</div>
-              <div className="text-lg font-bold text-yellow-400">{activeRidesQuery.data?.length || 0}</div>
-            </Card>
-            <Card className="bg-gray-800 border-gray-700 p-2">
-              <div className="text-xs text-gray-400">Disponibili</div>
-              <div className="text-lg font-bold text-blue-400">{availableDrivers.length}</div>
             </Card>
           </div>
 
