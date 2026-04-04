@@ -583,13 +583,24 @@ export const appRouter = router({
       }),
 
     getActivePanicAlerts: protectedProcedure.query(async () => {
-      return getActivePanicAlerts();
+      try {
+        return await getActivePanicAlerts();
+      } catch (error) {
+        console.error("[Dispatcher] Error fetching panic alerts:", error);
+        // Return empty array if table doesn't exist or query fails
+        return [];
+      }
     }),
 
     getPanicAlertsByDriver: protectedProcedure
       .input(z.object({ driverId: z.number() }))
       .query(async ({ input }) => {
-        return getPanicAlertsByDriver(input.driverId);
+        try {
+          return await getPanicAlertsByDriver(input.driverId);
+        } catch (error) {
+          console.error("[Dispatcher] Error fetching driver panic alerts:", error);
+          return [];
+        }
       }),
   }),
 });

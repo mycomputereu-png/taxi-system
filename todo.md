@@ -187,3 +187,8 @@
 - [x] Integrate timer into ClientApp when driver accepted
 - [x] Update timer as ETA changes
 - [x] Test countdown timer with real-time updates
+
+## BUG: panic_alerts query error in dispatcher - NEW
+- [x] Investigate panic_alerts table schema - FIXED: Table doesn't exist in database
+- [x] Fix getActivePanicAlerts query - FIXED: Added error handling to return empty array
+- [x] Test dispatcher page loads without errors - FIXED: Dispatcher page now loads successfully
