@@ -855,7 +855,7 @@ export default function Dispatcher() {
                     </div>
                     <div>
                       <p className="text-gray-400 text-xs">Rating Mediu</p>
-                      <p className="text-lg font-bold text-yellow-400">{clientProfileQuery.data.avgRating.toFixed(1)}/5</p>
+                      <p className="text-lg font-bold text-yellow-400">{clientProfileQuery.data.avgRating ? clientProfileQuery.data.avgRating.toFixed(1) : "N/A"}/5</p>
                     </div>
                   </div>
                 </div>

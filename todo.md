@@ -108,3 +108,5 @@
 - [x] Move setShowRatingModal(true) în completeRideMut.onSuccess
 - [x] Remove setTimeout din onClick handler
 - [x] Toate 9 teste Vitest trec
+- [x] Fixa TypeError: avgRating.toFixed is not a function în Dispatcher
+- [x] Adaugă null check pentru avgRating în modal profil client
