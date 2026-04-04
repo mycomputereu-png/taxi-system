@@ -428,9 +428,9 @@ export default function ClientApp() {
                   Introdu codul trimis la <span className="text-white font-semibold">{phone}</span>
                 </p>
                 {devOtp && (
-                  <div className="bg-blue-900 border border-blue-600 rounded-lg p-3 text-center">
-                    <p className="text-blue-300 text-xs mb-1">Cod demo (nu trimite SMS real):</p>
-                    <p className="text-white font-mono text-2xl font-bold tracking-widest">{devOtp}</p>
+                  <div className="bg-blue-900 border-2 border-blue-500 rounded-lg p-4 text-center">
+                    <p className="text-blue-300 text-sm mb-2 font-semibold">Cod demo (nu trimite SMS real):</p>
+                    <p className="text-white font-mono text-4xl font-bold tracking-widest bg-blue-950 rounded p-3">{devOtp}</p>
                   </div>
                 )}
                 <Input
