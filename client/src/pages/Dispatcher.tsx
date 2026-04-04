@@ -862,25 +862,6 @@ export default function Dispatcher() {
         <div className="flex-1 relative flex flex-col">
           <MapView onMapReady={handleMapReady} className="flex-1 w-full" />
 
-          {/* Driver Info Panel */}
-          <div className="bg-gray-900 border-t border-gray-800 p-3 max-h-32 overflow-y-auto">
-            <h3 className="text-xs font-semibold text-gray-300 mb-2">Soferi Online ({driverLocations.size})</h3>
-            <div className="flex gap-2 overflow-x-auto">
-              {Array.from(driverLocations.values()).map((driver) => (
-                <div key={driver.id} className="flex-shrink-0 bg-gray-800 border border-gray-700 rounded p-2 min-w-max">
-                  <p className="text-xs font-medium text-white">{driver.name || `Sofer #${driver.id}`}</p>
-                  <p className="text-xs text-gray-400">Lat: {driver.lat.toFixed(4)}</p>
-                  <p className="text-xs text-gray-400">Lng: {driver.lng.toFixed(4)}</p>
-                  <p className={`text-xs font-semibold ${
-                    driver.status === 'available' ? 'text-green-400' : 'text-yellow-400'
-                  }`}>
-                    {driver.status === 'available' ? 'Disponibil' : 'Ocupat'}
-                  </p>
-                </div>
-              ))}
-            </div>
-          </div>
-
           {/* Map Legend */}
           <div className="absolute top-4 right-4 bg-gray-900 bg-opacity-90 rounded-lg p-3 text-xs text-white border border-gray-700">
             <div className="font-semibold mb-2 text-yellow-400">Legendă</div>

@@ -167,9 +167,9 @@
 - [x] Ensure activeRide has clientId before submitting rating - Now using driver-specific query
 
 
-## 🎨 UI: Move online drivers section to main Soferi tab
+## 🎨 UI: Remove online drivers section completely
 - [x] Examine Dispatcher layout and identify online drivers section
-- [x] Revert: Keep online drivers panel below map only (remove from Șoferi tab)
-- [x] Remove "Șoferi Online" section from Șoferi tab
-- [x] Restore online drivers panel below map
+- [x] Remove "Soferi Online" section from Șoferi tab
+- [x] Remove online drivers panel from below map
+- [x] Verify map displays without driver info panel
 - [x] Test and verify layout
