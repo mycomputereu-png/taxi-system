@@ -329,18 +329,26 @@ export default function ClientApp() {
     }
     mapRef.current = map;
     setMapReady(true);
-    // Try to center on user location
-    navigator.geolocation?.getCurrentPosition(
-      (pos) => {
-        map.setCenter({ lat: pos.coords.latitude, lng: pos.coords.longitude });
-        map.setZoom(15);
-      },
-      () => {
-        map.setCenter({ lat: 44.4268, lng: 26.1025 });
-        map.setZoom(13);
-      }
-    );
-  }, []);
+    
+    // Center on client position if available
+    if (clientPos) {
+      map.setCenter({ lat: clientPos.lat, lng: clientPos.lng });
+      map.setZoom(15);
+      updateClientMarker(clientPos.lat, clientPos.lng);
+    } else {
+      // Try to center on user location
+      navigator.geolocation?.getCurrentPosition(
+        (pos) => {
+          map.setCenter({ lat: pos.coords.latitude, lng: pos.coords.longitude });
+          map.setZoom(15);
+        },
+        () => {
+          map.setCenter({ lat: 44.4268, lng: 26.1025 });
+          map.setZoom(13);
+        }
+      );
+    }
+  }, [clientPos, updateClientMarker]);
 
   const handleCallTaxi = () => {
     if (!session || !clientPos) {
@@ -481,7 +489,7 @@ export default function ClientApp() {
       </header>
 
       {/* Map */}
-      <div className="flex-1 relative" style={{ minHeight: "60vh" }}>
+      <div className="flex-1 relative w-full" style={{ height: "calc(100vh - 70px)" }}>
         {!mapReady && (
           <div className="absolute inset-0 bg-gray-900 flex items-center justify-center z-10">
             <span className="text-gray-400">Se încarcă hartă...</span>
