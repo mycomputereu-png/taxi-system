@@ -179,3 +179,11 @@
 - [x] Update ETA in real-time as driver location changes
 - [x] Format ETA display (minutes and seconds)
 - [x] Test ETA calculation and display
+
+## Animated Countdown Timer Feature - NEW
+- [x] Create CountdownTimer component with animation
+- [x] Implement countdown logic (minutes and seconds)
+- [x] Add visual styling with color transitions
+- [x] Integrate timer into ClientApp when driver accepted
+- [x] Update timer as ETA changes
+- [x] Test countdown timer with real-time updates

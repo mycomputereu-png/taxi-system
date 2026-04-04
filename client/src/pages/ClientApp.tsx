@@ -9,6 +9,7 @@ import { toast } from "sonner";
 import { useSocket } from "@/hooks/useSocket";
 import { Phone, MapPin, Car, Clock, CheckCircle, XCircle, Navigation, User } from "lucide-react";
 import ClientProfile from "./ClientProfile";
+import { CountdownTimer } from "@/components/CountdownTimer";
 
 type ClientSession = { token: string; clientId: number; phone: string };
 
@@ -556,9 +557,8 @@ export default function ClientApp() {
           </div>
         )}
         {rideStatus === "accepted" && estimatedArrival && (
-          <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-green-900 bg-opacity-95 rounded-xl px-4 py-3 flex items-center gap-2 shadow-lg">
-            <Clock className="w-4 h-4 text-green-300" />
-            <span className="text-white text-sm font-medium">Șoferul vine în ~{estimatedArrival} min</span>
+          <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-slate-900 bg-opacity-95 rounded-xl px-6 py-4 shadow-lg">
+            <CountdownTimer initialSeconds={estimatedArrival * 60} />
           </div>
         )}
         {rideStatus === "completed" && (
