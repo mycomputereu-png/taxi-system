@@ -62,3 +62,4 @@
 - [x] Adaugă logging pentru Socket.IO events
 - [x] Fixa buton Cheamă Taxi - adaugă fallback GPS și buton test locație simulată
 - [x] Rearanjare taburi Dispatcher: Curse în așteptare → Curse active → Șoferi online
+- [x] Adaugă legendă hartă cu buline colorate: șoferi disponibili (verde), șoferi ocupați (albastru), clienți în așteptare (roșu)

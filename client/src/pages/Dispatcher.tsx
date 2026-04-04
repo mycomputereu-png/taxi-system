@@ -428,6 +428,7 @@ export default function Dispatcher() {
   }
 
   const availableDrivers = driversQuery.data?.filter((d) => d.status === "available") ?? [];
+  const busyDrivers = driversQuery.data?.filter((d) => d.status === "busy") ?? [];
   const pendingRides = activeRidesQuery.data?.filter((r) => r.status === "pending") ?? [];
   const assignedRides = activeRidesQuery.data?.filter((r) => r.status !== "pending") ?? [];
 
@@ -716,10 +717,15 @@ export default function Dispatcher() {
           <MapView onMapReady={handleMapReady} className="w-full h-full" />
 
           {/* Map Legend */}
-          <div className="absolute top-4 right-4 bg-gray-900 bg-opacity-90 rounded-lg p-3 text-xs text-white">
-            <div className="flex items-center gap-2 mb-1">
+          <div className="absolute top-4 right-4 bg-gray-900 bg-opacity-90 rounded-lg p-3 text-xs text-white border border-gray-700">
+            <div className="font-semibold mb-2 text-yellow-400">Legendă</div>
+            <div className="flex items-center gap-2 mb-2">
               <div className="w-3 h-3 bg-green-500 rounded-full"></div>
               <span>Șoferi disponibili ({availableDrivers.length})</span>
+            </div>
+            <div className="flex items-center gap-2 mb-2">
+              <div className="w-3 h-3 bg-blue-500 rounded-full"></div>
+              <span>Șoferi ocupați ({busyDrivers.length})</span>
             </div>
             <div className="flex items-center gap-2">
               <div className="w-3 h-3 bg-red-500 rounded-full"></div>
