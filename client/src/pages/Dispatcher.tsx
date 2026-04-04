@@ -197,12 +197,21 @@ export default function Dispatcher() {
       });
     });
 
+    const unsubClientDisconnect = on("client:disconnect", (data: { clientId: number }) => {
+      setClientLocations((prev) => {
+        const next = new Map(prev);
+        next.delete(data.clientId);
+        return next;
+      });
+    });
+
     return () => {
       unsubDriverLoc();
       unsubDriverStatus();
       unsubRideNew();
       unsubRideStatus();
       unsubClientLoc();
+      unsubClientDisconnect();
     };
   }, [isAuthenticated, emit, on, utils]);
 

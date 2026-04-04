@@ -142,7 +142,10 @@ export function initSocketIO(httpServer: HttpServer) {
       const driverId = (socket as any).driverId;
       if (driverId) driverSockets.delete(driverId);
       const clientId = (socket as any).clientId;
-      if (clientId) clientSockets.delete(clientId);
+      if (clientId) {
+        clientSockets.delete(clientId);
+        io?.to("dispatchers").emit("client:disconnect", { clientId });
+      }
       console.log(`[Socket.IO] Client disconnected: ${socket.id}`);
     });
   });

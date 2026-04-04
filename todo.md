@@ -172,3 +172,10 @@
 - [x] Verify dispatcher receives client location updates - FIXED: Server broadcasting client:location events
 - [x] Fix client marker rendering on dispatcher map - FIXED: Updated listener to create new entries
 - [x] Test client location visibility - FIXED: Client markers now appear on dispatcher map
+
+
+## 🐛 BUG: Fake/incorrect client markers appear on dispatcher map
+- [x] Debug why fake client markers appear when client app opens - FIXED: Stale markers remained after disconnect
+- [x] Identify the source of incorrect clientId values - FIXED: No disconnect handler to remove markers
+- [x] Fix the issue by filtering or validating client markers - FIXED: Added client:disconnect listener and broadcast
+- [x] Test and verify only real clients appear - FIXED: Markers now removed when clients disconnect
