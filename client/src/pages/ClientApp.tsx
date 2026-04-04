@@ -473,9 +473,9 @@ export default function ClientApp() {
   const isRideActive = ["pending", "assigned", "accepted", "in_progress"].includes(rideStatus);
 
   return (
-    <div className="min-h-screen bg-gray-950 flex flex-col">
+    <div className="h-screen bg-gray-950 flex flex-col">
       {/* Header */}
-      <header className="bg-gray-900 border-b border-gray-800 px-4 py-3 flex items-center justify-between">
+      <header className="bg-gray-900 border-b border-gray-800 px-4 py-3 flex items-center justify-between flex-shrink-0">
         <div className="flex items-center gap-2">
           <span className="text-xl">🚖</span>
           <span className="text-yellow-400 font-bold">Taxi App</span>
@@ -489,7 +489,7 @@ export default function ClientApp() {
       </header>
 
       {/* Map */}
-      <div className="flex-1 relative w-full" style={{ height: "calc(100vh - 70px)" }}>
+      <div className="flex-1 relative w-full overflow-hidden">
         {!mapReady && (
           <div className="absolute inset-0 bg-gray-900 flex items-center justify-center z-10">
             <span className="text-gray-400">Se încarcă hartă...</span>
