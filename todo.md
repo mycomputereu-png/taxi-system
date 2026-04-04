@@ -60,3 +60,4 @@
 - [x] Fixa Map container not found - adaugă check și loading state
 - [x] Fixa Socket.IO timing - Dispatcher se conectează înainte de a emite auth
 - [x] Adaugă logging pentru Socket.IO events
+- [x] Fixa buton Cheamă Taxi - adaugă fallback GPS și buton test locație simulată

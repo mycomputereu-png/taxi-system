@@ -179,22 +179,39 @@ export default function ClientApp() {
   // GPS tracking
   useEffect(() => {
     if (!session) return;
-    if (!navigator.geolocation) return;
 
-    locationWatchRef.current = navigator.geolocation.watchPosition(
-      (pos) => {
-        const { latitude: lat, longitude: lng } = pos.coords;
-        setClientPos({ lat, lng });
-        emit("location:client", { lat, lng });
-        updateClientMarker(lat, lng);
-      },
-      (err) => console.warn("GPS error:", err),
-      { enableHighAccuracy: true, maximumAge: 5000 }
-    );
+    // Try real geolocation first
+    if (navigator.geolocation) {
+      locationWatchRef.current = navigator.geolocation.watchPosition(
+        (pos) => {
+          const { latitude: lat, longitude: lng } = pos.coords;
+          setClientPos({ lat, lng });
+          emit("location:client", { lat, lng });
+          updateClientMarker(lat, lng);
+        },
+        (err) => {
+          console.warn("GPS error:", err);
+          // Fallback: use default location (Bucharest center) for demo
+          const defaultLat = 44.4268;
+          const defaultLng = 26.1025;
+          setClientPos({ lat: defaultLat, lng: defaultLng });
+          emit("location:client", { lat: defaultLat, lng: defaultLng });
+          updateClientMarker(defaultLat, defaultLng);
+        },
+        { enableHighAccuracy: true, maximumAge: 5000, timeout: 10000 }
+      );
+    } else {
+      // Fallback if geolocation not available
+      const defaultLat = 44.4268;
+      const defaultLng = 26.1025;
+      setClientPos({ lat: defaultLat, lng: defaultLng });
+      emit("location:client", { lat: defaultLat, lng: defaultLng });
+      updateClientMarker(defaultLat, defaultLng);
+    }
 
     return () => {
       if (locationWatchRef.current !== null) {
-        navigator.geolocation.clearWatch(locationWatchRef.current);
+        navigator.geolocation?.clearWatch(locationWatchRef.current);
       }
     };
   }, [session, emit]);
@@ -336,6 +353,18 @@ export default function ClientApp() {
     setRideStatus("idle");
     setRideId(null);
     setDriverInfo(null);
+  };
+
+  const handleSimulateLocation = () => {
+    // Simulate random location near Bucharest for testing
+    const baseLat = 44.4268;
+    const baseLng = 26.1025;
+    const randomLat = baseLat + (Math.random() - 0.5) * 0.05;
+    const randomLng = baseLng + (Math.random() - 0.5) * 0.05;
+    setClientPos({ lat: randomLat, lng: randomLng });
+    emit("location:client", { lat: randomLat, lng: randomLng });
+    updateClientMarker(randomLat, randomLng);
+    toast.success("Locație simulată pentru test");
   };
 
   // ─── Login Screen ─────────────────────────────────────────────────────────
@@ -498,10 +527,20 @@ export default function ClientApp() {
               {requestRideMut.isPending ? "Se trimite..." : "Cheamă Taxi"}
             </Button>
             {!clientPos && (
-              <p className="text-gray-500 text-xs text-center">
-                <MapPin className="w-3 h-3 inline mr-1" />
-                Activați GPS-ul pentru a chema taxi
-              </p>
+              <div className="flex flex-col gap-2">
+                <p className="text-gray-500 text-xs text-center">
+                  <MapPin className="w-3 h-3 inline mr-1" />
+                  Activați GPS-ul pentru a chema taxi
+                </p>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="text-xs"
+                  onClick={handleSimulateLocation}
+                >
+                  🧪 Test cu locație simulată
+                </Button>
+              </div>
             )}
           </div>
         ) : rideStatus === "pending" ? (
