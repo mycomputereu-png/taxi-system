@@ -546,21 +546,38 @@ export default function Dispatcher() {
                     Curse în așteptare ({pendingRides.length})
                   </h3>
                   {pendingRides.map((ride) => (
-                    <Card key={ride.id} className="mb-2 bg-gray-800 border-red-800">
+                    <Card key={ride.id} className="mb-2 bg-gray-800 border-red-800 hover:border-red-600 transition-colors">
                       <CardContent className="p-3">
-                        <div className="flex items-start justify-between">
-                          <div>
-                            <p className="font-semibold text-white text-sm">{ride.client?.name || ride.client?.phone}</p>
-                            <p className="text-gray-400 text-xs">{ride.client?.phone}</p>
-                            {ride.clientAddress && <p className="text-gray-400 text-xs mt-1">{ride.clientAddress}</p>}
-                            <p className="text-gray-500 text-xs mt-1">
-                              {new Date(ride.createdAt).toLocaleTimeString("ro-RO")}
-                            </p>
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="flex-1">
+                            <div className="flex items-center gap-2">
+                              <p className="font-semibold text-white text-sm">{ride.client?.name || "Client"}</p>
+                              <Badge className="bg-red-700 text-xs">Nou</Badge>
+                            </div>
+                            <div className="mt-2 space-y-1">
+                              <p className="text-gray-300 text-xs flex items-center gap-1">
+                                <span className="font-medium">Tel:</span> {ride.client?.phone}
+                              </p>
+                              {ride.clientAddress && (
+                                <p className="text-gray-400 text-xs flex items-start gap-1">
+                                  <MapPin className="w-3 h-3 mt-0.5 flex-shrink-0" />
+                                  <span>{ride.clientAddress}</span>
+                                </p>
+                              )}
+                              {ride.clientLat && ride.clientLng && (
+                                <p className="text-gray-500 text-xs">
+                                  📍 {parseFloat(String(ride.clientLat)).toFixed(4)}, {parseFloat(String(ride.clientLng)).toFixed(4)}
+                                </p>
+                              )}
+                              <p className="text-gray-500 text-xs mt-1">
+                                {new Date(ride.createdAt).toLocaleTimeString("ro-RO")}
+                              </p>
+                            </div>
                           </div>
                           <div className="flex flex-col gap-1">
                             <Button
                               size="sm"
-                              className="bg-blue-600 hover:bg-blue-700 text-xs"
+                              className="bg-blue-600 hover:bg-blue-700 text-xs whitespace-nowrap"
                               onClick={() => { setSelectedRide(ride.id); setAssignDialogOpen(true); }}
                             >
                               <Navigation className="w-3 h-3 mr-1" /> Asignează
@@ -568,7 +585,7 @@ export default function Dispatcher() {
                             <Button
                               size="sm"
                               variant="outline"
-                              className="border-red-700 text-red-400 hover:bg-red-900 text-xs"
+                              className="border-red-700 text-red-400 hover:bg-red-900 text-xs whitespace-nowrap"
                               onClick={() => cancelRideMut.mutate({ rideId: ride.id })}
                             >
                               <XCircle className="w-3 h-3 mr-1" /> Anulează

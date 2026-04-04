@@ -192,3 +192,12 @@
 - [x] Display ETA in minutes and update as driver moves
 - [x] Add visual indicator showing driver is approaching ("Sosind..." when ETA = 0)
 - [x] Test end-to-end: assign driver -> client sees location -> countdown updates
+
+
+## 🎨 UI: Add client info panel to dispatcher right sidebar for ride assignment
+- [x] Identify the rides list/panel on the right side of dispatcher
+- [x] Add client phone number display in the ride card
+- [x] Add client location (lat/lng) or address in the ride card
+- [x] Display client name if available
+- [x] Add "Nou" badge to pending rides
+- [x] Test: new ride appears with full client info on right panel
