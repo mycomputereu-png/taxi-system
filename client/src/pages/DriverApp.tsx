@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import { io } from "socket.io-client";
-import { User, Lock, MapPin, Car, CheckCircle, XCircle, Navigation, Phone, Clock } from "lucide-react";
+import { User, Lock, MapPin, Car, CheckCircle, XCircle, Navigation, Phone, Clock, Star } from "lucide-react";
 
 type DriverSession = { token: string; driverId: number; name: string; username: string };
 
@@ -50,6 +50,9 @@ export default function DriverApp() {
   const [pendingRide, setPendingRide] = useState<AssignedRide | null>(null);
   const [activeRide, setActiveRide] = useState<any>(null);
   const [rideAccepted, setRideAccepted] = useState(false);
+  const [showRatingModal, setShowRatingModal] = useState(false);
+  const [ratingValue, setRatingValue] = useState(5);
+  const [ratingComment, setRatingComment] = useState("");
 
   // Map
   const [mapReady, setMapReady] = useState(false);
@@ -118,6 +121,16 @@ export default function DriverApp() {
   });
 
   const updateStatusMut = trpc.driver.updateStatus.useMutation();
+
+  const submitRatingMut = trpc.driver.submitRating.useMutation({
+    onSuccess: () => {
+      toast.success("Rating trimis!");
+      setShowRatingModal(false);
+      setRatingValue(5);
+      setRatingComment("");
+    },
+    onError: (e) => toast.error(e.message),
+  });
 
   const activeRideQuery = trpc.driver.getActiveRide.useQuery(
     { token: session?.token ?? "" },
@@ -514,7 +527,10 @@ export default function DriverApp() {
             </div>
             <Button
               className="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-5"
-              onClick={() => completeRideMut.mutate({ token: session.token, rideId: activeRide.id || activeRide.rideId })}
+              onClick={() => {
+                completeRideMut.mutate({ token: session.token, rideId: activeRide.id || activeRide.rideId });
+                setTimeout(() => setShowRatingModal(true), 500);
+              }}
               disabled={completeRideMut.isPending}
             >
               <CheckCircle className="w-5 h-5 mr-2" />
@@ -532,6 +548,70 @@ export default function DriverApp() {
           </div>
         )}
       </div>
+
+      {/* Rating Modal */}
+      {showRatingModal && activeRide && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <Card className="w-96 bg-gray-900 border-gray-700">
+            <CardHeader>
+              <CardTitle className="text-white">Evaluează clientul</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div>
+                <label className="text-gray-300 text-sm">Rating (1-5 stele)</label>
+                <div className="flex gap-2 mt-2">
+                  {[1, 2, 3, 4, 5].map((star) => (
+                    <button
+                      key={star}
+                      onClick={() => setRatingValue(star)}
+                      className={`text-2xl ${
+                        star <= ratingValue ? "text-yellow-400" : "text-gray-600"
+                      }`}
+                    >
+                      ★
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <label className="text-gray-300 text-sm">Comentariu (opțional)</label>
+                <Input
+                  placeholder="Scrie un comentariu..."
+                  value={ratingComment}
+                  onChange={(e) => setRatingComment(e.target.value)}
+                  className="bg-gray-800 border-gray-700 text-white mt-2"
+                />
+              </div>
+              <div className="flex gap-2">
+                <Button
+                  className="flex-1 bg-blue-600 hover:bg-blue-700"
+                  onClick={() => {
+                    if (session && activeRide) {
+                      submitRatingMut.mutate({
+                        token: session.token,
+                        clientId: activeRide.clientId,
+                        rideId: activeRide.id || activeRide.rideId,
+                        rating: ratingValue,
+                        comment: ratingComment || undefined,
+                      });
+                    }
+                  }}
+                  disabled={submitRatingMut.isPending}
+                >
+                  {submitRatingMut.isPending ? "Se trimite..." : "Trimite"}
+                </Button>
+                <Button
+                  variant="outline"
+                  className="flex-1 border-gray-600 text-gray-300"
+                  onClick={() => setShowRatingModal(false)}
+                >
+                  Sari
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
     </div>
   );
 }

@@ -65,3 +65,8 @@
 - [x] Adaugă legendă hartă cu buline colorate: șoferi disponibili (verde), șoferi ocupați (albastru), clienți în așteptare (roșu)
 - [x] Adaugă hartă Google Maps pe aplicația Șofer cu locația în timp real
 - [x] Adaugă legendă hartă Șofer (locația mea portocaliu, client roșu)
+- [x] Adaugă schema DB pentru ratings (tabelă client_ratings)
+- [x] Adaugă tRPC procedure pentru submitRating pe Șofer
+- [x] Adaugă UI rating pe aplicația Șofer (după finalizare cursă)
+- [x] Adaugă tab "Clienți" în Dispatcher cu lista și rating-uri
+- [x] Afișare clienți cu probleme (rating scăzut) în Dispatcher

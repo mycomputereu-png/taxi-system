@@ -118,3 +118,17 @@ export const clientSessions = mysqlTable("client_sessions", {
   expiresAt: timestamp("expiresAt").notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 });
+
+// Client ratings - drivers rate clients
+export const clientRatings = mysqlTable("client_ratings", {
+  id: int("id").autoincrement().primaryKey(),
+  clientId: int("clientId").notNull(),
+  driverId: int("driverId").notNull(),
+  rideId: int("rideId").notNull(),
+  rating: int("rating").notNull(), // 1-5 stars
+  comment: text("comment"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type ClientRating = typeof clientRatings.$inferSelect;
+export type InsertClientRating = typeof clientRatings.$inferInsert;

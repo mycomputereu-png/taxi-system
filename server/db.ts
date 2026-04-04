@@ -15,6 +15,9 @@ import {
   rides,
   users,
   InsertUser,
+  ClientRating,
+  InsertClientRating,
+  clientRatings,
 } from "../drizzle/schema";
 import { ENV } from "./_core/env";
 
@@ -363,4 +366,45 @@ export async function updateRideStatus(
     .update(rides)
     .set({ status, ...extra })
     .where(eq(rides.id, rideId));
+}
+
+// ─── Client Ratings ──────────────────────────────────────────────────────────
+
+export async function submitClientRating(data: InsertClientRating): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  await db.insert(clientRatings).values(data);
+}
+
+export async function getClientRatings(clientId: number): Promise<ClientRating[]> {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(clientRatings).where(eq(clientRatings.clientId, clientId));
+}
+
+export async function getClientAverageRating(clientId: number): Promise<number> {
+  const db = await getDb();
+  if (!db) return 0;
+  const { sql } = await import("drizzle-orm");
+  const result = await db
+    .select({ avg: sql<number>`AVG(${clientRatings.rating})` })
+    .from(clientRatings)
+    .where(eq(clientRatings.clientId, clientId));
+  return result[0]?.avg ? Math.round(result[0].avg * 10) / 10 : 0;
+}
+
+export async function getAllClientsWithRatings() {
+  const db = await getDb();
+  if (!db) return [];
+  const { sql } = await import("drizzle-orm");
+  const result = await db
+    .select({
+      client: clients,
+      avgRating: sql<number>`AVG(${clientRatings.rating})`,
+      ratingCount: sql<number>`COUNT(${clientRatings.id})`,
+    })
+    .from(clients)
+    .leftJoin(clientRatings, eq(clients.id, clientRatings.clientId))
+    .groupBy(clients.id);
+  return result;
 }

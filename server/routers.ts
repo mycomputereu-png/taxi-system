@@ -31,6 +31,8 @@ import {
   upsertClient,
   upsertUser,
   getUserByOpenId,
+  submitClientRating,
+  getAllClientsWithRatings,
 } from "./db";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
@@ -159,6 +161,22 @@ export const appRouter = router({
         const ride = await getRideById(input.rideId);
         if (ride) emitToClient(ride.clientId, "ride:completed", { rideId: ride.id });
         emitToDispatchers("ride:status", { rideId: input.rideId, status: "completed" });
+        return { success: true };
+      }),
+
+    submitRating: publicProcedure
+      .input(z.object({ token: z.string(), clientId: z.number(), rideId: z.number(), rating: z.number().min(1).max(5), comment: z.string().optional() }))
+      .mutation(async ({ input }) => {
+        const driver = await getDriverByToken(input.token);
+        if (!driver) throw new TRPCError({ code: "UNAUTHORIZED" });
+        await submitClientRating({
+          clientId: input.clientId,
+          driverId: driver.id,
+          rideId: input.rideId,
+          rating: input.rating,
+          comment: input.comment,
+        });
+        emitToDispatchers("client:rated", { clientId: input.clientId, rating: input.rating, driverId: driver.id });
         return { success: true };
       }),
   }),
@@ -402,6 +420,10 @@ export const appRouter = router({
         if (ride.driverId) emitToDriver(ride.driverId, "ride:cancelled", { rideId: ride.id });
         return { success: true };
       }),
+
+    getAllClientsWithRatings: protectedProcedure.query(async () => {
+      return getAllClientsWithRatings();
+    }),
   }),
 });
 

@@ -57,6 +57,7 @@ export default function Dispatcher() {
     refetchInterval: 5000,
   });
   const historyQuery = trpc.dispatcher.getRideHistory.useQuery(undefined, { enabled: isAuthenticated });
+  const clientsQuery = trpc.dispatcher.getAllClientsWithRatings.useQuery(undefined, { enabled: isAuthenticated });
 
   const addDriverMut = trpc.dispatcher.addDriver.useMutation({
     onSuccess: () => {
@@ -469,7 +470,7 @@ export default function Dispatcher() {
           </div>
 
           <Tabs defaultValue="pending" className="flex flex-col flex-1 overflow-hidden">
-            <TabsList className="grid grid-cols-3 m-3 bg-gray-800">
+            <TabsList className="grid grid-cols-4 m-3 bg-gray-800">
               <TabsTrigger value="pending" className="data-[state=active]:bg-yellow-500 data-[state=active]:text-black text-xs">
                 <Car className="w-3 h-3 mr-1" /> Așteptare
                 {pendingRides.length > 0 && (
@@ -488,6 +489,9 @@ export default function Dispatcher() {
               </TabsTrigger>
               <TabsTrigger value="drivers" className="data-[state=active]:bg-yellow-500 data-[state=active]:text-black text-xs">
                 <Users className="w-3 h-3 mr-1" /> Șoferi
+              </TabsTrigger>
+              <TabsTrigger value="clients" className="data-[state=active]:bg-yellow-500 data-[state=active]:text-black text-xs">
+                <Users className="w-3 h-3 mr-1" /> Clienți
               </TabsTrigger>
             </TabsList>
 
@@ -679,6 +683,46 @@ export default function Dispatcher() {
                 <div className="text-center text-gray-500 mt-8">
                   <Users className="w-12 h-12 mx-auto mb-3 opacity-30" />
                   <p>Niciun șofer înregistrat</p>
+                </div>
+              )}
+            </TabsContent>
+
+            {/* Clients Tab */}
+            <TabsContent value="clients" className="flex-1 overflow-y-auto px-3 pb-3 mt-0">
+              <h3 className="text-sm font-semibold text-gray-300 mb-3">Clienți și rating-uri</h3>
+              {clientsQuery.data && clientsQuery.data.length > 0 ? (
+                clientsQuery.data.map((item: any) => (
+                  <Card key={item.client.id} className="mb-2 bg-gray-800 border-gray-700">
+                    <CardContent className="p-3">
+                      <div className="flex items-start justify-between">
+                        <div className="flex-1">
+                          <p className="text-white text-sm font-medium">{item.client.name || item.client.phone}</p>
+                          <p className="text-gray-400 text-xs">Tel: {item.client.phone}</p>
+                          <div className="flex items-center gap-1 mt-1">
+                            {item.avgRating ? (
+                              <>
+                                <span className="text-yellow-400 text-sm">★ {item.avgRating.toFixed(1)}</span>
+                                <span className="text-gray-500 text-xs">({item.ratingCount} rating-uri)</span>
+                              </>
+                            ) : (
+                              <span className="text-gray-500 text-xs">Fără rating-uri</span>
+                            )}
+                          </div>
+                        </div>
+                        <Badge className={`text-xs ${
+                          item.avgRating >= 4 ? "bg-green-700" :
+                          item.avgRating >= 3 ? "bg-yellow-700" :
+                          item.avgRating ? "bg-red-700" : "bg-gray-700"
+                        }`}>
+                          {item.avgRating ? item.avgRating.toFixed(1) : "N/A"}
+                        </Badge>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))
+              ) : (
+                <div className="text-center py-4 text-gray-400">
+                  <p>Niciun client</p>
                 </div>
               )}
             </TabsContent>
