@@ -749,8 +749,8 @@ export default function Dispatcher() {
                           </div>
                         </div>
                         <Badge className={`text-xs ${
-                          item.avgRating >= 4 ? "bg-green-700" :
-                          item.avgRating >= 3 ? "bg-yellow-700" :
+                          item.avgRating && item.avgRating >= 4 ? "bg-green-700" :
+                          item.avgRating && item.avgRating >= 3 ? "bg-yellow-700" :
                           item.avgRating ? "bg-red-700" : "bg-gray-700"
                         }`}>
                           {item.avgRating ? item.avgRating.toFixed(1) : "N/A"}
