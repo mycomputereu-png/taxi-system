@@ -22,6 +22,20 @@
       "when": 1775291086031,
       "tag": "0002_graceful_killmonger",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "5",
+      "when": 1775309701640,
+      "tag": "0003_nice_wendell_rand",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "5",
+      "when": 1775310503180,
+      "tag": "0004_burly_korg",
+      "breakpoints": true
     }
   ]
 }

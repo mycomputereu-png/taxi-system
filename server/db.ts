@@ -27,12 +27,43 @@ export async function getDb() {
   if (!_db && process.env.DATABASE_URL) {
     try {
       _db = drizzle(process.env.DATABASE_URL);
+      // Run migrations on first connection
+      await runMigrations();
     } catch (error) {
       console.warn("[Database] Failed to connect:", error);
       _db = null;
     }
   }
   return _db;
+}
+
+let _migrationRun = false;
+
+async function runMigrations() {
+  if (_migrationRun) return;
+  _migrationRun = true;
+  
+  try {
+    const db = _db;
+    if (!db) return;
+    
+    // Add carPlate and carBrand columns if they don't exist
+    await db.execute(
+      "ALTER TABLE `drivers` ADD COLUMN `carPlate` varchar(32) NULL"
+    ).catch(() => {
+      // Column might already exist, ignore error
+    });
+    
+    await db.execute(
+      "ALTER TABLE `drivers` ADD COLUMN `carBrand` varchar(128) NULL"
+    ).catch(() => {
+      // Column might already exist, ignore error
+    });
+    
+    console.log("[Database] Migrations completed");
+  } catch (error) {
+    console.warn("[Database] Migration error:", error);
+  }
 }
 
 // ─── Users (Manus OAuth) ─────────────────────────────────────────────────────

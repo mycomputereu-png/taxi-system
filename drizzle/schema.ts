@@ -31,6 +31,8 @@ export const drivers = mysqlTable("drivers", {
   passwordHash: varchar("passwordHash", { length: 256 }).notNull(),
   name: varchar("name", { length: 128 }).notNull(),
   phone: varchar("phone", { length: 32 }),
+  carPlate: varchar("carPlate", { length: 32 }),
+  carBrand: varchar("carBrand", { length: 128 }),
   status: mysqlEnum("status", ["available", "busy", "offline"]).default("offline").notNull(),
   currentLat: decimal("currentLat", { precision: 10, scale: 7 }),
   currentLng: decimal("currentLng", { precision: 10, scale: 7 }),

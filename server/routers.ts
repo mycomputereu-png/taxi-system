@@ -314,6 +314,8 @@ export const appRouter = router({
           password: z.string().min(6),
           name: z.string().min(2),
           phone: z.string().optional(),
+          carPlate: z.string().optional(),
+          carBrand: z.string().optional(),
         })
       )
       .mutation(async ({ input }) => {
@@ -325,6 +327,8 @@ export const appRouter = router({
           passwordHash,
           name: input.name,
           phone: input.phone ?? null,
+          carPlate: input.carPlate ?? null,
+          carBrand: input.carBrand ?? null,
         });
         return { success: true };
       }),
