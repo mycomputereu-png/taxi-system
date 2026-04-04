@@ -207,7 +207,8 @@ export const appRouter = router({
       .query(async ({ input }) => {
         const driver = await getDriverByToken(input.token);
         if (!driver) throw new TRPCError({ code: "UNAUTHORIZED" });
-        return getDriverActiveRide(driver.id);
+        const ride = await getDriverActiveRide(driver.id);
+        return ride ?? null;
       }),
 
     submitRating: publicProcedure
@@ -345,7 +346,8 @@ export const appRouter = router({
       .query(async ({ input }) => {
         const client = await getClientByToken(input.token);
         if (!client) throw new TRPCError({ code: "UNAUTHORIZED" });
-        return getClientActiveRide(client.id);
+        const ride = await getClientActiveRide(client.id);
+        return ride ?? null;
       }),
 
     cancelRide: publicProcedure
