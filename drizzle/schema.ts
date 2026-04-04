@@ -9,6 +9,7 @@ import {
   boolean,
 } from "drizzle-orm/mysql-core";
 
+
 export const users = mysqlTable("users", {
   id: int("id").autoincrement().primaryKey(),
   openId: varchar("openId", { length: 64 }).notNull().unique(),
@@ -31,6 +32,8 @@ export const drivers = mysqlTable("drivers", {
   passwordHash: varchar("passwordHash", { length: 256 }).notNull(),
   name: varchar("name", { length: 128 }).notNull(),
   phone: varchar("phone", { length: 32 }),
+  carPlate: varchar("carPlate", { length: 32 }),
+  carBrand: varchar("carBrand", { length: 128 }),
   status: mysqlEnum("status", ["available", "busy", "offline"]).default("offline").notNull(),
   currentLat: decimal("currentLat", { precision: 10, scale: 7 }),
   currentLng: decimal("currentLng", { precision: 10, scale: 7 }),
@@ -41,6 +44,9 @@ export const drivers = mysqlTable("drivers", {
 
 export type Driver = typeof drivers.$inferSelect;
 export type InsertDriver = typeof drivers.$inferInsert;
+
+// Type helpers for car info
+export type DriverWithCar = Driver & { carPlate?: string | null; carBrand?: string | null };
 
 // Clients table - phone-based auth
 export const clients = mysqlTable("clients", {

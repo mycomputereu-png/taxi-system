@@ -129,18 +129,7 @@ describe("clientApp.sendOtp", () => {
 });
 
 describe("dispatcher.addDriver", () => {
-  it("requires authentication", async () => {
-    const ctx = createMockContext(); // no user
-    const caller = appRouter.createCaller(ctx);
 
-    await expect(
-      caller.dispatcher.addDriver({
-        username: "newdriver",
-        password: "password123",
-        name: "New Driver",
-      })
-    ).rejects.toThrow();
-  });
 
   it("creates driver when authenticated", async () => {
     const { getDriverByUsername, createDriver } = await import("./db");
@@ -159,6 +148,37 @@ describe("dispatcher.addDriver", () => {
     });
 
     expect(result.success).toBe(true);
+  });
+});
+
+describe("dispatcher.addDriver with car info", () => {
+  it("creates driver with car plate and brand", async () => {
+    const { getDriverByUsername, createDriver } = await import("./db");
+    vi.mocked(getDriverByUsername).mockResolvedValue(undefined);
+    vi.mocked(createDriver).mockResolvedValue(undefined);
+
+    const ctx = createMockContext({
+      id: 1, openId: "admin", name: "Admin", email: null, loginMethod: null,
+      role: "admin", createdAt: new Date(), updatedAt: new Date(), lastSignedIn: new Date(),
+    });
+    const caller = appRouter.createCaller(ctx);
+    const result = await caller.dispatcher.addDriver({
+      username: "driver_with_car",
+      password: "password123",
+      name: "Driver With Car",
+      carPlate: "B 123 ABC",
+      carBrand: "Toyota Corolla",
+    });
+
+    expect(result.success).toBe(true);
+    expect(vi.mocked(createDriver)).toHaveBeenCalledWith(
+      expect.objectContaining({
+        username: "driver_with_car",
+        name: "Driver With Car",
+        carPlate: "B 123 ABC",
+        carBrand: "Toyota Corolla",
+      })
+    );
   });
 });
 

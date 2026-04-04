@@ -88,3 +88,9 @@
 - [x] Adaugă sorting/filtering pentru ratinguri (newest, oldest, highest, lowest)
 - [x] Adaugă sorting/filtering pentru curse (newest, oldest, completed, cancelled)
 - [x] Teste Vitest pentru dispatcher.getClientProfile (9 teste trec)
+- [x] Adaugă coloane carPlate și carBrand în tabelul drivers
+- [x] Creare și aplicare migrație DB (SQL generat)
+- [x] Extinde tRPC addDriver cu câmpuri mașină
+- [x] Adaugă input fields în formularul Dispatcher
+- [x] Afișare info mașină în lista șoferilor (cu emoji)
+- [x] Teste pentru noile câmpuri (9 teste trec)

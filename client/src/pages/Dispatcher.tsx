@@ -47,7 +47,7 @@ export default function Dispatcher() {
   const [clientLocations, setClientLocations] = useState<Map<number, ClientMarker>>(new Map());
   const [selectedRide, setSelectedRide] = useState<number | null>(null);
   const [assignDialogOpen, setAssignDialogOpen] = useState(false);
-  const [newDriver, setNewDriver] = useState({ username: "", password: "", name: "", phone: "" });
+  const [newDriver, setNewDriver] = useState({ username: "", password: "", name: "", phone: "", carPlate: "", carBrand: "" });
   const [addDriverOpen, setAddDriverOpen] = useState(false);
   const [selectedClientId, setSelectedClientId] = useState<number | null>(null);
   const [ratingsSortBy, setRatingsSortBy] = useState<"newest" | "oldest" | "highest" | "lowest">("newest");
@@ -71,7 +71,7 @@ export default function Dispatcher() {
     onSuccess: () => {
       toast.success("Șofer adăugat cu succes!");
       utils.dispatcher.getAllDrivers.invalidate();
-      setNewDriver({ username: "", password: "", name: "", phone: "" });
+      setNewDriver({ username: "", password: "", name: "", phone: "", carPlate: "", carBrand: "" });
       setAddDriverOpen(false);
     },
     onError: (e) => toast.error(e.message),
@@ -655,6 +655,18 @@ export default function Dispatcher() {
                         onChange={(e) => setNewDriver((p) => ({ ...p, phone: e.target.value }))}
                         className="bg-gray-800 border-gray-600 text-white"
                       />
+                      <Input
+                        placeholder="Numărul mașinii (opțional)"
+                        value={newDriver.carPlate}
+                        onChange={(e) => setNewDriver((p) => ({ ...p, carPlate: e.target.value }))}
+                        className="bg-gray-800 border-gray-600 text-white"
+                      />
+                      <Input
+                        placeholder="Marca automobilului (opțional)"
+                        value={newDriver.carBrand}
+                        onChange={(e) => setNewDriver((p) => ({ ...p, carBrand: e.target.value }))}
+                        className="bg-gray-800 border-gray-600 text-white"
+                      />
                       <Button
                         className="bg-yellow-500 hover:bg-yellow-600 text-black font-bold"
                         onClick={() => addDriverMut.mutate(newDriver)}
@@ -674,7 +686,9 @@ export default function Dispatcher() {
                       <div>
                         <p className="font-semibold text-white text-sm">{driver.name}</p>
                         <p className="text-gray-400 text-xs">@{driver.username}</p>
-                        {driver.phone && <p className="text-gray-500 text-xs">{driver.phone}</p>}
+                        {driver.phone && <p className="text-gray-500 text-xs">☎️ {driver.phone}</p>}
+                        {(driver as any).carPlate && <p className="text-gray-500 text-xs">🚗 {(driver as any).carPlate}</p>}
+                        {(driver as any).carBrand && <p className="text-gray-500 text-xs">📍 {(driver as any).carBrand}</p>}
                       </div>
                       <div className="flex items-center gap-2">
                         <Badge
