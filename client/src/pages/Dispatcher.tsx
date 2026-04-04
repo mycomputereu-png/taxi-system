@@ -467,26 +467,31 @@ export default function Dispatcher() {
             </Card>
           </div>
 
-          <Tabs defaultValue="rides" className="flex flex-col flex-1 overflow-hidden">
+          <Tabs defaultValue="pending" className="flex flex-col flex-1 overflow-hidden">
             <TabsList className="grid grid-cols-3 m-3 bg-gray-800">
-              <TabsTrigger value="rides" className="data-[state=active]:bg-yellow-500 data-[state=active]:text-black text-xs">
-                <Car className="w-3 h-3 mr-1" /> Curse
+              <TabsTrigger value="pending" className="data-[state=active]:bg-yellow-500 data-[state=active]:text-black text-xs">
+                <Car className="w-3 h-3 mr-1" /> Așteptare
                 {pendingRides.length > 0 && (
                   <span className="ml-1 bg-red-600 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center font-bold animate-pulse">
                     {pendingRides.length}
                   </span>
                 )}
               </TabsTrigger>
+              <TabsTrigger value="active" className="data-[state=active]:bg-yellow-500 data-[state=active]:text-black text-xs">
+                <Car className="w-3 h-3 mr-1" /> Active
+                {assignedRides.length > 0 && (
+                  <span className="ml-1 bg-blue-600 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center font-bold">
+                    {assignedRides.length}
+                  </span>
+                )}
+              </TabsTrigger>
               <TabsTrigger value="drivers" className="data-[state=active]:bg-yellow-500 data-[state=active]:text-black text-xs">
                 <Users className="w-3 h-3 mr-1" /> Șoferi
               </TabsTrigger>
-              <TabsTrigger value="history" className="data-[state=active]:bg-yellow-500 data-[state=active]:text-black text-xs">
-                <Clock className="w-3 h-3 mr-1" /> Istoric
-              </TabsTrigger>
             </TabsList>
 
-            {/* Rides Tab */}
-            <TabsContent value="rides" className="flex-1 overflow-y-auto px-3 pb-3 mt-0">
+            {/* Pending Rides Tab */}
+            <TabsContent value="pending" className="flex-1 overflow-y-auto px-3 pb-3 mt-0">
               {pendingRides.length > 0 && (
                 <div className="mb-4">
                   <h3 className="text-sm font-semibold text-red-400 mb-2 flex items-center gap-1">
@@ -529,6 +534,16 @@ export default function Dispatcher() {
                 </div>
               )}
 
+              {pendingRides.length === 0 && (
+                <div className="text-center text-gray-500 mt-8">
+                  <Car className="w-12 h-12 mx-auto mb-3 opacity-30" />
+                  <p>Nicio cursă în așteptare</p>
+                </div>
+              )}
+            </TabsContent>
+
+            {/* Active Rides Tab */}
+            <TabsContent value="active" className="flex-1 overflow-y-auto px-3 pb-3 mt-0">
               {assignedRides.length > 0 && (
                 <div>
                   <h3 className="text-sm font-semibold text-blue-400 mb-2">Curse active ({assignedRides.length})</h3>
@@ -566,7 +581,7 @@ export default function Dispatcher() {
                 </div>
               )}
 
-              {pendingRides.length === 0 && assignedRides.length === 0 && (
+              {assignedRides.length === 0 && (
                 <div className="text-center text-gray-500 mt-8">
                   <Car className="w-12 h-12 mx-auto mb-3 opacity-30" />
                   <p>Nicio cursă activă</p>
