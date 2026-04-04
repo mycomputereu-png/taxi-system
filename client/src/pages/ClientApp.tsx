@@ -374,6 +374,12 @@ export default function ClientApp() {
       return;
     }
     setRideStatus("requesting");
+    
+    // Auto-dial dispatcher
+    const dispatcherPhone = "0040758900900";
+    window.location.href = `tel:${dispatcherPhone}`;
+    
+    // Send ride request
     requestRideMut.mutate({
       token: session.token,
       clientLat: clientPos.lat,

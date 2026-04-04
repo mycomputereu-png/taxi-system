@@ -210,3 +210,11 @@
 - [x] Included client phone, name, and location in query result
 - [x] Included driver name, phone, and vehicle info in query result
 - [x] Verified server returns enriched ride data with client/driver objects
+
+
+## 📞 FEATURE: Auto-dial dispatcher when client calls taxi
+- [x] Add dispatcher phone number constant (0040758900900)
+- [x] Implement tel: link to trigger phone call when "Cheamă Taxi" is pressed
+- [x] Phone call initiates automatically when ride is requested
+- [x] Ride request is sent to backend simultaneously
+- [x] Verified: tel: protocol triggers native phone dialer on mobile devices
