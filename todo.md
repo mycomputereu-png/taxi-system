@@ -102,3 +102,9 @@
 - [x] Verificare rating modal - funcționează
 - [x] Verificare submitRating mutation - funcționează
 - [x] Toate 9 teste Vitest trec
+- [x] Fixa harta neagră pe DriverApp (conflict h-[500px] vs h-full)
+- [x] Fixa MapView component - remove h-[500px] fix
+- [x] Fixa rating modal nu apare (activeRide cleared before setShowRatingModal)
+- [x] Move setShowRatingModal(true) în completeRideMut.onSuccess
+- [x] Remove setTimeout din onClick handler
+- [x] Toate 9 teste Vitest trec

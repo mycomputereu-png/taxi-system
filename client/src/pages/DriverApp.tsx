@@ -117,11 +117,12 @@ export default function DriverApp() {
   const completeRideMut = trpc.driver.completeRide.useMutation({
     onSuccess: () => {
       toast.success("Cursă finalizată!");
+      // Show rating modal BEFORE clearing activeRide
+      setShowRatingModal(true);
       // Unsubscribe from client location updates
       if (activeRide && socketRef.current) {
         socketRef.current.emit("untrack:client", { clientId: activeRide.clientId });
       }
-      setActiveRide(null);
       setRideAccepted(false);
       setEstimatedArrival(null);
       clearDirections();
@@ -141,6 +142,7 @@ export default function DriverApp() {
       setRatingValue(5);
       setRatingComment("");
       setActiveRide(null);
+      setRideAccepted(false);
     },
     onError: (e) => toast.error(e.message),
   });
@@ -442,7 +444,7 @@ export default function DriverApp() {
       </header>
 
       {/* Map */}
-      <div className="flex-1 relative" style={{ minHeight: "55vh" }}>
+      <div className="flex-1 relative bg-gray-800" style={{ minHeight: "55vh", height: "100%" }}>
         <MapView onMapReady={handleMapReady} className="w-full h-full" />
 
         {/* Map Legend */}
@@ -556,7 +558,6 @@ export default function DriverApp() {
               className="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-5"
               onClick={() => {
                 completeRideMut.mutate({ token: session.token, rideId: activeRide.id || activeRide.rideId });
-                setTimeout(() => setShowRatingModal(true), 500);
               }}
               disabled={completeRideMut.isPending}
             >
