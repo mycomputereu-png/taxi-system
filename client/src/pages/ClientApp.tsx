@@ -180,21 +180,37 @@ export default function ClientApp() {
   }, []);
 
   const calculateETA = useCallback((from: { lat: number; lng: number }, to: { lat: number; lng: number }) => {
-    const service = new google.maps.DistanceMatrixService();
-    service.getDistanceMatrix(
-      {
-        origins: [from],
-        destinations: [to],
-        travelMode: google.maps.TravelMode.DRIVING,
-      },
-      (result, status) => {
-        if (status === "OK" && result?.rows[0]?.elements[0]?.duration) {
-          const minutes = Math.ceil(result.rows[0].elements[0].duration.value / 60);
-          setEstimatedArrival(minutes);
-        }
+    if (!session) return;
+    
+    // Use server-side ETA calculation for more accurate results
+    trpc.clientApp.calculateETA.query({
+      token: session.token,
+      driverLat: from.lat,
+      driverLng: from.lng,
+      clientLat: to.lat,
+      clientLng: to.lng,
+    }).then((eta) => {
+      if (eta?.durationMinutes) {
+        setEstimatedArrival(eta.durationMinutes);
       }
-    );
-  }, []);
+    }).catch(() => {
+      // Fallback to client-side calculation if server call fails
+      const service = new google.maps.DistanceMatrixService();
+      service.getDistanceMatrix(
+        {
+          origins: [from],
+          destinations: [to],
+          travelMode: google.maps.TravelMode.DRIVING,
+        },
+        (result, status) => {
+          if (status === "OK" && result?.rows[0]?.elements[0]?.duration) {
+            const minutes = Math.ceil(result.rows[0].elements[0].duration.value / 60);
+            setEstimatedArrival(minutes);
+          }
+        }
+      );
+    });
+  }, [session]);
 
   const clearDirections = useCallback(() => {
     if (directionsRendererRef.current) {

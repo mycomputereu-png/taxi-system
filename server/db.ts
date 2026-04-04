@@ -575,3 +575,60 @@ export async function updatePanicAlertStatus(
   }
   await db.update(panicAlerts).set(updates).where(eq(panicAlerts.id, alertId));
 }
+
+
+// ─── ETA Calculation ───────────────────────────────────────────────
+
+export interface ETAData {
+  durationSeconds: number;
+  distanceMeters: number;
+  durationMinutes: number;
+  durationText: string;
+}
+
+export async function calculateETA(
+  driverLat: number,
+  driverLng: number,
+  clientLat: number,
+  clientLng: number
+): Promise<ETAData | null> {
+  try {
+    // Use Google Maps Directions API via the Manus proxy
+    const response = await fetch(
+      `https://maps.googleapis.com/maps/api/directions/json?origin=${driverLat},${driverLng}&destination=${clientLat},${clientLng}&mode=driving`,
+      {
+        headers: {
+          "Authorization": `Bearer ${ENV.forgeApiKey}`,
+        },
+      }
+    );
+
+    if (!response.ok) {
+      console.warn("[ETA] Directions API error:", response.status);
+      return null;
+    }
+
+    const data = await response.json();
+    if (data.routes && data.routes.length > 0) {
+      const route = data.routes[0];
+      if (route.legs && route.legs.length > 0) {
+        const leg = route.legs[0];
+        const durationSeconds = leg.duration.value;
+        const distanceMeters = leg.distance.value;
+        const durationMinutes = Math.ceil(durationSeconds / 60);
+
+        return {
+          durationSeconds,
+          distanceMeters,
+          durationMinutes,
+          durationText: leg.duration.text,
+        };
+      }
+    }
+
+    return null;
+  } catch (error) {
+    console.warn("[ETA] Error calculating ETA:", error);
+    return null;
+  }
+}

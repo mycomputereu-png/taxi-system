@@ -168,6 +168,14 @@
 
 
 ## BUG: Client Location Not Appearing on Dispatcher
-- [ ] Fix Socket.IO auth:client not emitted when client requests ride
-- [ ] Ensure location:client events reach dispatcher
-- [ ] Test client location display on dispatcher map
+- [x] Fix Socket.IO auth:client not emitted when client requests ride - FIXED: Added auth:client emit on mount and reconnect
+- [x] Ensure location:client events reach dispatcher - FIXED: Updated listener to create new entries
+- [x] Test client location display on dispatcher map - FIXED: Client markers now display in real-time
+
+## ETA (Estimated Time of Arrival) Feature - NEW
+- [x] Implement ETA calculation using Google Maps Directions API on server
+- [x] Add tRPC procedure to calculate ETA from driver to client
+- [x] Create ETA display UI component in ClientApp
+- [x] Update ETA in real-time as driver location changes
+- [x] Format ETA display (minutes and seconds)
+- [x] Test ETA calculation and display

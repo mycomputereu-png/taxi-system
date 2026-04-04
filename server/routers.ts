@@ -350,6 +350,29 @@ export const appRouter = router({
         return ride ?? null;
       }),
 
+    calculateETA: publicProcedure
+      .input(
+        z.object({
+          token: z.string(),
+          driverLat: z.number(),
+          driverLng: z.number(),
+          clientLat: z.number(),
+          clientLng: z.number(),
+        })
+      )
+      .query(async ({ input }) => {
+        const client = await getClientByToken(input.token);
+        if (!client) throw new TRPCError({ code: "UNAUTHORIZED" });
+        const { calculateETA } = await import("./db");
+        const eta = await calculateETA(
+          input.driverLat,
+          input.driverLng,
+          input.clientLat,
+          input.clientLng
+        );
+        return eta;
+      }),
+
     cancelRide: publicProcedure
       .input(z.object({ token: z.string(), rideId: z.number() }))
       .mutation(async ({ input }) => {
