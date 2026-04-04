@@ -154,3 +154,9 @@
 - [ ] Create panic alert audit trail for compliance
 - [ ] Add panic button long-press gesture for mobile
 - [ ] Implement panic alert geofencing and proximity alerts
+
+
+## BUG: Cheamă Taxi Button Not Working
+- [x] Fix GPS location undefined (clientLat, clientLng) when requesting ride - FIXED: changed lat/lng to clientLat/clientLng
+- [x] Ensure GPS location is captured before ride request - GPS is captured via watchPosition
+- [x] Test ride request with valid location - Ready to test

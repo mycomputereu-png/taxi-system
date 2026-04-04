@@ -346,8 +346,9 @@ export default function ClientApp() {
     setRideStatus("requesting");
     requestRideMut.mutate({
       token: session.token,
-      lat: clientPos.lat,
-      lng: clientPos.lng,
+      clientLat: clientPos.lat,
+      clientLng: clientPos.lng,
+      clientAddress: "Locația curentă",
     });
   };
 
