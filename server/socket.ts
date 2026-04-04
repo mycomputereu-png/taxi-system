@@ -92,7 +92,15 @@ export function initSocketIO(httpServer: HttpServer) {
       const clientId = (socket as any).clientId;
       if (!clientId) return;
       await updateClientLocation(clientId, String(data.lat), String(data.lng));
+      // Broadcast to dispatchers
       io?.to("dispatchers").emit("client:location", {
+        clientId,
+        lat: data.lat,
+        lng: data.lng,
+        timestamp: Date.now(),
+      });
+      // Also broadcast to driver tracking this client (for active ride)
+      io?.to(`tracking:client:${clientId}`).emit("client:location:update", {
         clientId,
         lat: data.lat,
         lng: data.lng,
@@ -108,6 +116,16 @@ export function initSocketIO(httpServer: HttpServer) {
 
     socket.on("untrack:driver", (data: { driverId: number }) => {
       socket.leave(`tracking:driver:${data.driverId}`);
+    });
+
+    // ─── Driver tracking client ───────────────────────────────────────────────
+
+    socket.on("track:client", (data: { clientId: number }) => {
+      socket.join(`tracking:client:${data.clientId}`);
+    });
+
+    socket.on("untrack:client", (data: { clientId: number }) => {
+      socket.leave(`tracking:client:${data.clientId}`);
     });
 
     // ─── Disconnect ───────────────────────────────────────────────────────────

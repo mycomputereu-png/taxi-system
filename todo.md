@@ -94,3 +94,11 @@
 - [x] Adaugă input fields în formularul Dispatcher ("Numărul mașinii", "Marca automobilului")
 - [x] Afișare info mașină în lista șoferilor cu emoji (🚗 placa, 📍 marca)
 - [x] Teste Vitest pentru noile câmpuri (9 teste trec)
+- [x] Fixa locația clientului pe hartă șofer după acceptare (Socket.IO track:client event)
+- [x] Adaugă listener client:location:update în DriverApp
+- [x] Actualizare automată marker și rută când clientul se mișcă
+- [x] Abonare/dezabonare la locație client la acceptare/finalizare
+- [x] Verificare buton "Cursă Terminată" - funcționează
+- [x] Verificare rating modal - funcționează
+- [x] Verificare submitRating mutation - funcționează
+- [x] Toate 9 teste Vitest trec

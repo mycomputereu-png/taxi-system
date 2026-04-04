@@ -88,6 +88,10 @@ export default function DriverApp() {
       if (pendingRide) {
         setActiveRide(pendingRide);
         setPendingRide(null);
+        // Subscribe to client location updates
+        if (socketRef.current) {
+          socketRef.current.emit("track:client", { clientId: pendingRide.clientId });
+        }
         // Draw route to client
         if (driverPos) {
           drawRouteToClient(driverPos, { lat: pendingRide.lat, lng: pendingRide.lng });
@@ -100,6 +104,10 @@ export default function DriverApp() {
   const rejectRideMut = trpc.driver.rejectRide.useMutation({
     onSuccess: () => {
       toast.info("Cursă refuzată.");
+      // Unsubscribe from client location if was tracking
+      if (pendingRide && socketRef.current) {
+        socketRef.current.emit("untrack:client", { clientId: pendingRide.clientId });
+      }
       setPendingRide(null);
       setRideAccepted(false);
     },
@@ -109,6 +117,10 @@ export default function DriverApp() {
   const completeRideMut = trpc.driver.completeRide.useMutation({
     onSuccess: () => {
       toast.success("Cursă finalizată!");
+      // Unsubscribe from client location updates
+      if (activeRide && socketRef.current) {
+        socketRef.current.emit("untrack:client", { clientId: activeRide.clientId });
+      }
       setActiveRide(null);
       setRideAccepted(false);
       setEstimatedArrival(null);
@@ -124,10 +136,11 @@ export default function DriverApp() {
 
   const submitRatingMut = trpc.driver.submitRating.useMutation({
     onSuccess: () => {
-      toast.success("Rating trimis!");
+      toast.success("Rating trimis! Clientul va vedea evaluarea.");
       setShowRatingModal(false);
       setRatingValue(5);
       setRatingComment("");
+      setActiveRide(null);
     },
     onError: (e) => toast.error(e.message),
   });
@@ -185,11 +198,25 @@ export default function DriverApp() {
       toast.info("Cursa a fost anulată de client/dispatcher");
     });
 
+    s.on("client:location:update", (data: { clientId: number; lat: number; lng: number }) => {
+      // Update client location on map when tracking
+      if (rideAccepted && activeRide && activeRide.clientId === data.clientId) {
+        if (mapRef.current && clientMarkerRef.current) {
+          clientMarkerRef.current.setPosition({ lat: data.lat, lng: data.lng });
+          // Update route
+          if (driverPos) {
+            drawRouteToClient(driverPos, { lat: data.lat, lng: data.lng });
+            calculateETA(driverPos, { lat: data.lat, lng: data.lng });
+          }
+        }
+      }
+    });
+
     return () => {
       s.disconnect();
       socketRef.current = null;
     };
-  }, [session]);
+  }, [session, rideAccepted, activeRide, driverPos]);
 
   // GPS tracking
   useEffect(() => {
