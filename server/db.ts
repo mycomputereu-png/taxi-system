@@ -18,6 +18,9 @@ import {
   ClientRating,
   InsertClientRating,
   clientRatings,
+  panicAlerts,
+  PanicAlert,
+  InsertPanicAlert,
 } from "../drizzle/schema";
 import { ENV } from "./_core/env";
 
@@ -504,4 +507,65 @@ export async function getClientProfile(clientId: number) {
     totalRatings: ratingsReceived.length,
     completedRides: clientRides.filter(r => r.ride.status === "completed").length,
   };
+}
+
+
+// ─── Panic Alerts ────────────────────────────────────────────────────────────
+
+export async function createPanicAlert(data: InsertPanicAlert): Promise<PanicAlert> {
+  const db = await getDb();
+  if (!db) throw new Error("DB not available");
+  await db.insert(panicAlerts).values(data);
+  const result = await db
+    .select()
+    .from(panicAlerts)
+    .where(eq(panicAlerts.driverId, data.driverId!))
+    .orderBy(desc(panicAlerts.createdAt))
+    .limit(1);
+  return result[0]!;
+}
+
+export async function getPanicAlertById(id: number): Promise<PanicAlert | undefined> {
+  const db = await getDb();
+  if (!db) return undefined;
+  const result = await db.select().from(panicAlerts).where(eq(panicAlerts.id, id)).limit(1);
+  return result[0];
+}
+
+export async function getActivePanicAlerts(): Promise<PanicAlert[]> {
+  const db = await getDb();
+  if (!db) return [];
+  return db
+    .select()
+    .from(panicAlerts)
+    .where(eq(panicAlerts.status, "active"))
+    .orderBy(desc(panicAlerts.createdAt));
+}
+
+export async function getPanicAlertsByDriver(driverId: number): Promise<PanicAlert[]> {
+  const db = await getDb();
+  if (!db) return [];
+  return db
+    .select()
+    .from(panicAlerts)
+    .where(eq(panicAlerts.driverId, driverId))
+    .orderBy(desc(panicAlerts.createdAt))
+    .limit(50);
+}
+
+export async function updatePanicAlertStatus(
+  alertId: number,
+  status: PanicAlert["status"],
+  extra?: Partial<PanicAlert>
+): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  const updates: any = { status, ...extra };
+  if (status === "acknowledged" && !extra?.acknowledgedAt) {
+    updates.acknowledgedAt = new Date();
+  }
+  if (status === "resolved" && !extra?.resolvedAt) {
+    updates.resolvedAt = new Date();
+  }
+  await db.update(panicAlerts).set(updates).where(eq(panicAlerts.id, alertId));
 }

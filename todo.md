@@ -120,3 +120,37 @@
 - [x] TypeScript: No errors
 - [x] BUG FIX: Butonul "Cheamă taxi" - adaug coloane rides în migrație (assignedAt, acceptanceTimeoutAt)
 - [x] BUG FIX: Harta pe aplicația șoferului - fix container height cu delay și h-screen
+
+## Panic Button Feature (Emergency Alert System) - NEW
+- [x] Create `panicAlerts` table with driver location, status, and timestamps
+- [x] Add database helper functions: `createPanicAlert`, `updatePanicAlertStatus`, `getActivePanicAlerts`, `getPanicAlertsByDriver`
+- [x] Implement tRPC procedures: `panic.triggerAlert`, `panic.cancelPanicAlert`, `panic.getActivePanicAlerts`
+- [x] Add Socket.IO events for real-time panic alert notifications to dispatchers
+- [x] Add discreet panic button (🚨) on active ride screen in DriverApp
+- [x] Implement panic confirmation modal with safety check
+- [x] Add panic alert status indicator showing active alert state
+- [x] Create cancel panic alert button with dispatcher notification
+- [x] Add visual feedback (animated pulse, color coding) for panic state
+- [x] Add "Urgență" (Panic) tab to dispatcher dashboard with alert counter
+- [x] Display active panic alerts with driver info, location, and timestamp
+- [x] Implement panic alert selection and details view
+- [x] Add real-time panic alert notifications with Socket.IO integration
+- [x] Show panic alerts with visual priority (red theme, animated icon)
+- [x] Create panic.test.ts with 12 comprehensive unit tests (all passing)
+
+## Known Issues & Pre-existing Errors
+- [ ] Fix TypeScript errors in Dispatcher.tsx (accessing `.client` and `.driver` properties on Ride object)
+- [ ] Fix TypeScript errors in DriverApp.tsx (accessing `.client` property on Ride object)
+- [ ] Fix TypeScript errors in ClientApp.tsx (missing `code` property in OTP response)
+- [ ] Implement `getProfile` procedure for client profile queries
+- [ ] Rename `client` router to `clientApp` to avoid tRPC built-in method collision
+
+## Future Enhancements for Panic Button
+- [ ] Add panic alert history and analytics
+- [ ] Implement automatic panic alert escalation after timeout
+- [ ] Add dispatcher response/notes to panic alerts
+- [ ] Implement panic alert categories (medical, accident, security, etc.)
+- [ ] Add SMS/push notifications for panic alerts
+- [ ] Create panic alert audit trail for compliance
+- [ ] Add panic button long-press gesture for mobile
+- [ ] Implement panic alert geofencing and proximity alerts

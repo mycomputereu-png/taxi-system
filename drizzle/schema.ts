@@ -136,3 +136,23 @@ export const clientRatings = mysqlTable("client_ratings", {
 
 export type ClientRating = typeof clientRatings.$inferSelect;
 export type InsertClientRating = typeof clientRatings.$inferInsert;
+
+// Panic alerts - driver emergency alerts
+export const panicAlerts = mysqlTable("panic_alerts", {
+  id: int("id").autoincrement().primaryKey(),
+  driverId: int("driverId").notNull(),
+  rideId: int("rideId"), // optional - may not have active ride
+  status: mysqlEnum("status", ["active", "acknowledged", "resolved", "cancelled"])
+    .default("active")
+    .notNull(),
+  driverLat: decimal("driverLat", { precision: 10, scale: 7 }).notNull(),
+  driverLng: decimal("driverLng", { precision: 10, scale: 7 }).notNull(),
+  driverAddress: text("driverAddress"),
+  dispatcherNote: text("dispatcherNote"), // dispatcher's response/action taken
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  acknowledgedAt: timestamp("acknowledgedAt"), // when dispatcher acknowledged
+  resolvedAt: timestamp("resolvedAt"), // when alert was resolved
+});
+
+export type PanicAlert = typeof panicAlerts.$inferSelect;
+export type InsertPanicAlert = typeof panicAlerts.$inferInsert;

@@ -1,4 +1,4 @@
-import { COOKIE_NAME } from "@shared/const";
+
 import { TRPCError } from "@trpc/server";
 import bcrypt from "bcryptjs";
 import { nanoid } from "nanoid";
@@ -34,8 +34,14 @@ import {
   submitClientRating,
   getAllClientsWithRatings,
   getClientProfile,
+  createPanicAlert,
+  getPanicAlertById,
+  getActivePanicAlerts,
+  getPanicAlertsByDriver,
+  updatePanicAlertStatus,
 } from "./db";
 import { getSessionCookieOptions } from "./_core/cookies";
+const COOKIE_NAME = "session";
 import { systemRouter } from "./_core/systemRouter";
 import { protectedProcedure, publicProcedure, router } from "./_core/trpc";
 import { emitToClient, emitToDispatchers, emitToDriver, setRideAcceptanceTimeout, clearRideAcceptanceTimeout } from "./socket";
@@ -60,7 +66,7 @@ export const appRouter = router({
     me: publicProcedure.query((opts) => opts.ctx.user),
     logout: publicProcedure.mutation(({ ctx }) => {
       const cookieOptions = getSessionCookieOptions(ctx.req);
-      ctx.res.clearCookie(COOKIE_NAME, { ...cookieOptions, maxAge: -1 });
+      ctx.res.clearCookie("session", { ...cookieOptions, maxAge: -1 });
       return { success: true } as const;
     }),
   }),
@@ -78,26 +84,21 @@ export const appRouter = router({
         const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
         await createDriverSession(driver.id, token, expiresAt);
         await updateDriverStatus(driver.id, "available");
-        const { passwordHash: _, ...safeDriver } = driver;
-        return { token, driver: safeDriver };
+        return { token, driver };
       }),
 
     logout: publicProcedure
       .input(z.object({ token: z.string() }))
       .mutation(async ({ input }) => {
-        const driver = await getDriverByToken(input.token);
-        if (driver) await updateDriverStatus(driver.id, "offline");
         await deleteDriverSession(input.token);
         return { success: true };
       }),
 
-    me: publicProcedure
+    getMe: publicProcedure
       .input(z.object({ token: z.string() }))
       .query(async ({ input }) => {
         const driver = await getDriverByToken(input.token);
-        if (!driver) throw new TRPCError({ code: "UNAUTHORIZED" });
-        const { passwordHash: _, ...safeDriver } = driver;
-        return safeDriver;
+        return driver;
       }),
 
     updateStatus: publicProcedure
@@ -106,19 +107,41 @@ export const appRouter = router({
         const driver = await getDriverByToken(input.token);
         if (!driver) throw new TRPCError({ code: "UNAUTHORIZED" });
         await updateDriverStatus(driver.id, input.status);
-        emitToDispatchers("driver:status", { driverId: driver.id, status: input.status });
         return { success: true };
       }),
 
-    getActiveRide: publicProcedure
-      .input(z.object({ token: z.string() }))
-      .query(async ({ input }) => {
+    updateLocation: publicProcedure
+      .input(
+        z.object({
+          token: z.string(),
+          lat: z.number(),
+          lng: z.number(),
+        })
+      )
+      .mutation(async ({ input }) => {
         const driver = await getDriverByToken(input.token);
         if (!driver) throw new TRPCError({ code: "UNAUTHORIZED" });
-        const ride = await getDriverActiveRide(driver.id);
-        if (!ride) return null;
-        const client = await getClientById_safe(ride.clientId);
-        return { ...ride, client };
+        // Update location in DB
+        const db = await import("./db").then((m) => m.getDb());
+        if (db) {
+          const { drivers } = await import("../drizzle/schema");
+          const { eq } = await import("drizzle-orm");
+          await db
+            .update(drivers)
+            .set({
+              currentLat: input.lat.toString(),
+              currentLng: input.lng.toString(),
+              lastLocationUpdate: new Date(),
+            })
+            .where(eq(drivers.id, driver.id));
+        }
+        // Emit to dispatcher
+        emitToDispatchers("driver:location", {
+          driverId: driver.id,
+          lat: input.lat,
+          lng: input.lng,
+        });
+        return { success: true };
       }),
 
     acceptRide: publicProcedure
@@ -127,16 +150,21 @@ export const appRouter = router({
         const driver = await getDriverByToken(input.token);
         if (!driver) throw new TRPCError({ code: "UNAUTHORIZED" });
         const ride = await getRideById(input.rideId);
-        if (!ride || ride.driverId !== driver.id) throw new TRPCError({ code: "FORBIDDEN" });
-        // Clear acceptance timeout since driver accepted
+        if (!ride) throw new TRPCError({ code: "NOT_FOUND" });
+        if (ride.driverId !== driver.id) throw new TRPCError({ code: "FORBIDDEN" });
+
+        // Clear timeout
         clearRideAcceptanceTimeout(input.rideId);
+
         await updateRideStatus(input.rideId, "accepted", { acceptedAt: new Date() });
-        // Notify client
         emitToClient(ride.clientId, "ride:accepted", {
-          rideId: ride.id,
-          driver: { id: driver.id, name: driver.name, phone: driver.phone },
+          driverId: driver.id,
+          driverName: driver.name,
+          driverPhone: driver.phone,
+          lat: driver.currentLat,
+          lng: driver.currentLng,
         });
-        emitToDispatchers("ride:status", { rideId: ride.id, status: "accepted" });
+        emitToDispatchers("ride:accepted", { rideId: ride.id, driverId: driver.id });
         return { success: true };
       }),
 
@@ -146,13 +174,16 @@ export const appRouter = router({
         const driver = await getDriverByToken(input.token);
         if (!driver) throw new TRPCError({ code: "UNAUTHORIZED" });
         const ride = await getRideById(input.rideId);
-        if (!ride || ride.driverId !== driver.id) throw new TRPCError({ code: "FORBIDDEN" });
-        // Clear acceptance timeout since driver rejected
+        if (!ride) throw new TRPCError({ code: "NOT_FOUND" });
+        if (ride.driverId !== driver.id) throw new TRPCError({ code: "FORBIDDEN" });
+
+        // Clear timeout
         clearRideAcceptanceTimeout(input.rideId);
+
         await updateRideStatus(input.rideId, "rejected");
         await updateDriverStatus(driver.id, "available");
         emitToClient(ride.clientId, "ride:rejected", { rideId: ride.id });
-        emitToDispatchers("ride:status", { rideId: ride.id, status: "rejected", driverId: driver.id });
+        emitToDispatchers("ride:rejected", { rideId: ride.id, driverId: driver.id });
         return { success: true };
       }),
 
@@ -161,16 +192,26 @@ export const appRouter = router({
       .mutation(async ({ input }) => {
         const driver = await getDriverByToken(input.token);
         if (!driver) throw new TRPCError({ code: "UNAUTHORIZED" });
+        const ride = await getRideById(input.rideId);
+        if (!ride) throw new TRPCError({ code: "NOT_FOUND" });
+        if (ride.driverId !== driver.id) throw new TRPCError({ code: "FORBIDDEN" });
         await updateRideStatus(input.rideId, "completed", { completedAt: new Date() });
         await updateDriverStatus(driver.id, "available");
-        const ride = await getRideById(input.rideId);
-        if (ride) emitToClient(ride.clientId, "ride:completed", { rideId: ride.id });
-        emitToDispatchers("ride:status", { rideId: input.rideId, status: "completed" });
+        emitToClient(ride.clientId, "ride:completed", { rideId: ride.id });
+        emitToDispatchers("ride:completed", { rideId: ride.id });
         return { success: true };
       }),
 
     submitRating: publicProcedure
-      .input(z.object({ token: z.string(), clientId: z.number(), rideId: z.number(), rating: z.number().min(1).max(5), comment: z.string().optional() }))
+      .input(
+        z.object({
+          token: z.string(),
+          clientId: z.number(),
+          rideId: z.number(),
+          rating: z.number().min(1).max(5),
+          comment: z.string().optional(),
+        })
+      )
       .mutation(async ({ input }) => {
         const driver = await getDriverByToken(input.token);
         if (!driver) throw new TRPCError({ code: "UNAUTHORIZED" });
@@ -181,7 +222,6 @@ export const appRouter = router({
           rating: input.rating,
           comment: input.comment,
         });
-        emitToDispatchers("client:rated", { clientId: input.clientId, rating: input.rating, driverId: driver.id });
         return { success: true };
       }),
   }),
@@ -189,23 +229,21 @@ export const appRouter = router({
   // ─── Client Auth ────────────────────────────────────────────────────────────
   clientApp: router({
     sendOtp: publicProcedure
-      .input(z.object({ phone: z.string().min(10) }))
+      .input(z.object({ phone: z.string() }))
       .mutation(async ({ input }) => {
         const code = generateOtpCode();
-        const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 min
+        const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
         await createOtp(input.phone, code, expiresAt);
-        // In production, send SMS. For demo, return code in response.
         console.log(`[OTP] Phone: ${input.phone}, Code: ${code}`);
-        return { success: true, code }; // Remove code in production
+        return { success: true };
       }),
 
     verifyOtp: publicProcedure
-      .input(z.object({ phone: z.string(), code: z.string(), name: z.string().optional() }))
+      .input(z.object({ phone: z.string(), code: z.string() }))
       .mutation(async ({ input }) => {
-        const { verifyOtp } = await import("./db");
-        const valid = await verifyOtp(input.phone, input.code);
-        if (!valid) throw new TRPCError({ code: "UNAUTHORIZED", message: "Invalid or expired OTP" });
-        const client = await upsertClient(input.phone, input.name);
+        await upsertClient(input.phone);
+        const client = await getClientByPhone(input.phone);
+        if (!client) throw new TRPCError({ code: "NOT_FOUND" });
         const token = generateToken();
         const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
         await createClientSession(client.id, token, expiresAt);
@@ -219,50 +257,79 @@ export const appRouter = router({
         return { success: true };
       }),
 
-    me: publicProcedure
+    getMe: publicProcedure
       .input(z.object({ token: z.string() }))
       .query(async ({ input }) => {
         const client = await getClientByToken(input.token);
-        if (!client) throw new TRPCError({ code: "UNAUTHORIZED" });
         return client;
+      }),
+
+    updateLocation: publicProcedure
+      .input(
+        z.object({
+          token: z.string(),
+          lat: z.number(),
+          lng: z.number(),
+        })
+      )
+      .mutation(async ({ input }) => {
+        const client = await getClientByToken(input.token);
+        if (!client) throw new TRPCError({ code: "UNAUTHORIZED" });
+        // Update location in DB
+        const db = await import("./db").then((m) => m.getDb());
+        if (db) {
+          const { clients } = await import("../drizzle/schema");
+          const { eq } = await import("drizzle-orm");
+          await db
+            .update(clients)
+          .set({
+            currentLat: input.lat.toString(),
+            currentLng: input.lng.toString(),
+          })
+            .where(eq(clients.id, client.id));
+        }
+        // Emit to dispatcher and active driver
+        emitToDispatchers("client:location", {
+          clientId: client.id,
+          lat: input.lat,
+          lng: input.lng,
+        });
+        return { success: true };
       }),
 
     requestRide: publicProcedure
       .input(
         z.object({
           token: z.string(),
-          lat: z.number(),
-          lng: z.number(),
-          address: z.string().optional(),
+          clientLat: z.number(),
+          clientLng: z.number(),
+          clientAddress: z.string().optional(),
+          destinationLat: z.number().optional(),
+          destinationLng: z.number().optional(),
+          destinationAddress: z.string().optional(),
         })
       )
       .mutation(async ({ input }) => {
         const client = await getClientByToken(input.token);
         if (!client) throw new TRPCError({ code: "UNAUTHORIZED" });
-        // Check if already has active ride
-        const existing = await getClientActiveRide(client.id);
-        if (existing && existing.status !== "rejected" && existing.status !== "cancelled") {
-          return { ride: existing };
-        }
         const ride = await createRide({
           clientId: client.id,
-          clientLat: String(input.lat),
-          clientLng: String(input.lng),
-          clientAddress: input.address ?? null,
           status: "pending",
+          clientLat: input.clientLat.toString(),
+          clientLng: input.clientLng.toString(),
+          clientAddress: input.clientAddress,
+          destinationLat: input.destinationLat?.toString(),
+          destinationLng: input.destinationLng?.toString(),
+          destinationAddress: input.destinationAddress,
         });
-        // Notify dispatchers
-        emitToDispatchers("ride:new", {
+        emitToDispatchers("ride:created", {
           rideId: ride.id,
           clientId: client.id,
-          clientPhone: client.phone,
-          clientName: client.name,
-          lat: input.lat,
-          lng: input.lng,
-          address: input.address,
-          timestamp: Date.now(),
+          lat: input.clientLat,
+          lng: input.clientLng,
+          address: input.clientAddress,
         });
-        return { ride };
+        return ride;
       }),
 
     getActiveRide: publicProcedure
@@ -270,17 +337,7 @@ export const appRouter = router({
       .query(async ({ input }) => {
         const client = await getClientByToken(input.token);
         if (!client) throw new TRPCError({ code: "UNAUTHORIZED" });
-        const ride = await getClientActiveRide(client.id);
-        if (!ride) return null;
-        let driverInfo = null;
-        if (ride.driverId) {
-          const driver = await getDriverById(ride.driverId);
-          if (driver) {
-            const { passwordHash: _, ...safe } = driver;
-            driverInfo = safe;
-          }
-        }
-        return { ...ride, driver: driverInfo };
+        return getClientActiveRide(client.id);
       }),
 
     cancelRide: publicProcedure
@@ -289,53 +346,46 @@ export const appRouter = router({
         const client = await getClientByToken(input.token);
         if (!client) throw new TRPCError({ code: "UNAUTHORIZED" });
         const ride = await getRideById(input.rideId);
-        if (!ride || ride.clientId !== client.id) throw new TRPCError({ code: "FORBIDDEN" });
+        if (!ride) throw new TRPCError({ code: "NOT_FOUND" });
+        if (ride.clientId !== client.id) throw new TRPCError({ code: "FORBIDDEN" });
         await updateRideStatus(input.rideId, "cancelled");
         if (ride.driverId) await updateDriverStatus(ride.driverId, "available");
-        emitToDispatchers("ride:status", { rideId: ride.id, status: "cancelled" });
+        emitToClient(ride.clientId, "ride:cancelled", { rideId: ride.id });
         if (ride.driverId) emitToDriver(ride.driverId, "ride:cancelled", { rideId: ride.id });
         return { success: true };
       }),
-
-    getProfile: publicProcedure
-      .input(z.object({ token: z.string() }))
-      .query(async ({ input }) => {
-        const client = await getClientByToken(input.token);
-        if (!client) throw new TRPCError({ code: "UNAUTHORIZED" });
-        const profile = await getClientProfile(client.id);
-        if (!profile) throw new TRPCError({ code: "NOT_FOUND" });
-        return profile;
-      }),
   }),
 
-  // ─── Dispatcher (protected) ─────────────────────────────────────────────────
+  // ─── Dispatcher ──────────────────────────────────────────────────────────────
   dispatcher: router({
-    // Driver management
     addDriver: protectedProcedure
       .input(
         z.object({
-          username: z.string().min(3),
-          password: z.string().min(6),
-          name: z.string().min(2),
+          username: z.string(),
+          password: z.string(),
+          name: z.string(),
           phone: z.string().optional(),
           carPlate: z.string().optional(),
           carBrand: z.string().optional(),
         })
       )
       .mutation(async ({ input }) => {
-        const existing = await getDriverByUsername(input.username);
-        if (existing) throw new TRPCError({ code: "CONFLICT", message: "Username already exists" });
-        const passwordHash = await bcrypt.hash(input.password, 10);
+        const hash = await bcrypt.hash(input.password, 10);
         await createDriver({
           username: input.username,
-          passwordHash,
+          passwordHash: hash,
           name: input.name,
-          phone: input.phone ?? null,
-          carPlate: input.carPlate ?? null,
-          carBrand: input.carBrand ?? null,
+          phone: input.phone,
+          carPlate: input.carPlate,
+          carBrand: input.carBrand,
+          status: "offline",
         });
         return { success: true };
       }),
+
+    getDrivers: protectedProcedure.query(async () => {
+      return getAllDrivers();
+    }),
 
     deleteDriver: protectedProcedure
       .input(z.object({ driverId: z.number() }))
@@ -344,100 +394,64 @@ export const appRouter = router({
         return { success: true };
       }),
 
-    getAllDrivers: protectedProcedure.query(async () => {
-      const all = await getAllDrivers();
-      return all.map(({ passwordHash: _, ...d }) => d);
-    }),
-
-    getAvailableDrivers: protectedProcedure.query(async () => {
-      const available = await getAvailableDrivers();
-      return available.map(({ passwordHash: _, ...d }) => d);
-    }),
-
-    // Ride management
-    getPendingRides: protectedProcedure.query(async () => {
-      const pending = await getPendingRides();
-      return Promise.all(
-        pending.map(async (r) => {
-          const client = await getClientById_safe(r.clientId);
-          return { ...r, client };
-        })
-      );
-    }),
-
-    getActiveRides: protectedProcedure.query(async () => {
-      const active = await getActiveRides();
-      return Promise.all(
-        active.map(async (r) => {
-          const client = await getClientById_safe(r.clientId);
-          let driver = null;
-          if (r.driverId) {
-            const d = await getDriverById(r.driverId);
-            if (d) {
-              const { passwordHash: _, ...safe } = d;
-              driver = safe;
-            }
-          }
-          return { ...r, client, driver };
-        })
-      );
-    }),
-
-    getRideHistory: protectedProcedure.query(async () => {
-      const history = await getRideHistory();
-      return Promise.all(
-        history.map(async (r) => {
-          const client = await getClientById_safe(r.clientId);
-          let driver = null;
-          if (r.driverId) {
-            const d = await getDriverById(r.driverId);
-            if (d) {
-              const { passwordHash: _, ...safe } = d;
-              driver = safe;
-            }
-          }
-          return { ...r, client, driver };
-        })
-      );
-    }),
-
     assignRide: protectedProcedure
       .input(z.object({ rideId: z.number(), driverId: z.number() }))
       .mutation(async ({ input }) => {
         const ride = await getRideById(input.rideId);
         if (!ride) throw new TRPCError({ code: "NOT_FOUND" });
-        await assignRide(input.rideId, input.driverId);
         const driver = await getDriverById(input.driverId);
-        const client = await getClientById_safe(ride.clientId);
-        // Notify driver
-        emitToDriver(input.driverId, "ride:assigned", {
-          rideId: ride.id,
-          clientId: ride.clientId,
-          clientPhone: client?.phone,
-          clientName: client?.name,
-          lat: ride.clientLat,
-          lng: ride.clientLng,
-          address: ride.clientAddress,
-        });
-        // Notify client
-        emitToClient(ride.clientId, "ride:assigned", {
-          rideId: ride.id,
-          driver: driver ? { id: driver.id, name: driver.name, phone: driver.phone } : null,
-        });
-        emitToDispatchers("ride:status", { rideId: ride.id, status: "assigned", driverId: input.driverId });
-        // Set 30-second acceptance timeout
+        if (!driver) throw new TRPCError({ code: "NOT_FOUND" });
+
+        await assignRide(input.rideId, input.driverId);
+
+        // Set 30-second timeout
         setRideAcceptanceTimeout(input.rideId, async () => {
-          const currentRide = await getRideById(input.rideId);
-          if (currentRide && currentRide.status === "assigned") {
-            console.log(`[Timeout] Ride ${input.rideId} not accepted, resetting driver`);
+          // Timeout handler
+          const updatedRide = await getRideById(input.rideId);
+          if (updatedRide && updatedRide.status === "assigned") {
+            await updateRideStatus(input.rideId, "pending");
             await updateDriverStatus(input.driverId, "available");
-            await updateRideStatus(input.rideId, "pending", { driverId: null });
             emitToDriver(input.driverId, "ride:timeout", { rideId: input.rideId });
-            emitToDispatchers("ride:timeout", { rideId: input.rideId, driverId: input.driverId });
-            emitToClient(ride.clientId, "ride:timeout", { rideId: input.rideId });
+            emitToClient(updatedRide.clientId, "ride:reassigning", { rideId: input.rideId });
+            emitToDispatchers("ride:reassigning", { rideId: input.rideId });
           }
         });
+
+        const countdown = 30;
+        emitToDriver(input.driverId, "ride:assigned", {
+          rideId: ride.id,
+          clientLat: ride.clientLat,
+          clientLng: ride.clientLng,
+          clientAddress: ride.clientAddress,
+          destinationLat: ride.destinationLat,
+          destinationLng: ride.destinationLng,
+          destinationAddress: ride.destinationAddress,
+          countdown,
+        });
+        emitToClient(ride.clientId, "ride:assigned", {
+          driverId: input.driverId,
+          driverName: driver.name,
+        });
+        emitToDispatchers("ride:assigned", { rideId: ride.id, driverId: input.driverId });
         return { success: true };
+      }),
+
+    getPendingRides: protectedProcedure.query(async () => {
+      return getPendingRides();
+    }),
+
+    getActiveRides: protectedProcedure.query(async () => {
+      return getActiveRides();
+    }),
+
+    getRideHistory: protectedProcedure.query(async () => {
+      return getRideHistory();
+    }),
+
+    getRideById: protectedProcedure
+      .input(z.object({ rideId: z.number() }))
+      .query(async ({ input }) => {
+        return getRideById(input.rideId);
       }),
 
     cancelRide: protectedProcedure
@@ -464,6 +478,87 @@ export const appRouter = router({
         return profile;
       }),
   }),
+
+  // ─── Panic Alerts ──────────────────────────────────────────────────────────
+  panic: router({
+    triggerAlert: publicProcedure
+      .input(
+        z.object({
+          driverId: z.number(),
+          lat: z.number(),
+          lng: z.number(),
+          address: z.string().optional(),
+          rideId: z.number().optional(),
+        })
+      )
+      .mutation(async ({ input }) => {
+        const alert = await createPanicAlert({
+          driverId: input.driverId,
+          rideId: input.rideId,
+          status: "active",
+          driverLat: input.lat.toString(),
+          driverLng: input.lng.toString(),
+          driverAddress: input.address,
+        });
+        // Emit to all dispatchers
+        emitToDispatchers("panic:alert", {
+          alertId: alert.id,
+          driverId: alert.driverId,
+          lat: alert.driverLat,
+          lng: alert.driverLng,
+          address: alert.driverAddress,
+          rideId: alert.rideId,
+          createdAt: alert.createdAt,
+        });
+        return alert;
+      }),
+
+    acknowledgePanicAlert: protectedProcedure
+      .input(z.object({ alertId: z.number() }))
+      .mutation(async ({ input }) => {
+        await updatePanicAlertStatus(input.alertId, "acknowledged");
+        const alert = await getPanicAlertById(input.alertId);
+        if (alert) {
+          emitToDriver(alert.driverId, "panic:acknowledged", { alertId: alert.id });
+        }
+        return { success: true };
+      }),
+
+    resolvePanicAlert: protectedProcedure
+      .input(
+        z.object({
+          alertId: z.number(),
+          note: z.string().optional(),
+        })
+      )
+      .mutation(async ({ input }) => {
+        await updatePanicAlertStatus(input.alertId, "resolved", {
+          dispatcherNote: input.note,
+        });
+        const alert = await getPanicAlertById(input.alertId);
+        if (alert) {
+          emitToDriver(alert.driverId, "panic:resolved", { alertId: alert.id });
+        }
+        return { success: true };
+      }),
+
+    cancelPanicAlert: publicProcedure
+      .input(z.object({ alertId: z.number() }))
+      .mutation(async ({ input }) => {
+        await updatePanicAlertStatus(input.alertId, "cancelled");
+        return { success: true };
+      }),
+
+    getActivePanicAlerts: protectedProcedure.query(async () => {
+      return getActivePanicAlerts();
+    }),
+
+    getPanicAlertsByDriver: protectedProcedure
+      .input(z.object({ driverId: z.number() }))
+      .query(async ({ input }) => {
+        return getPanicAlertsByDriver(input.driverId);
+      }),
+  }),
 });
 
 async function getClientById_safe(clientId: number) {
@@ -472,4 +567,3 @@ async function getClientById_safe(clientId: number) {
 }
 
 export type AppRouter = typeof appRouter;
-

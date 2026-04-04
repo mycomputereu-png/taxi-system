@@ -43,6 +43,13 @@
       "when": 1775315356686,
       "tag": "0005_tiny_mister_fear",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "5",
+      "when": 1775317753242,
+      "tag": "0006_black_kree",
+      "breakpoints": true
     }
   ]
 }

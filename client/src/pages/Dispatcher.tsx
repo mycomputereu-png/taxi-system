@@ -52,16 +52,23 @@ export default function Dispatcher() {
   const [selectedClientId, setSelectedClientId] = useState<number | null>(null);
   const [ratingsSortBy, setRatingsSortBy] = useState<"newest" | "oldest" | "highest" | "lowest">("newest");
   const [ridesSortBy, setRidesSortBy] = useState<"newest" | "oldest" | "completed" | "cancelled">("newest");
+  const [selectedPanicAlertId, setSelectedPanicAlertId] = useState<number | null>(null);
+  const [panicResponseNote, setPanicResponseNote] = useState("");
 
   // tRPC queries
   const utils = trpc.useUtils();
-  const driversQuery = trpc.dispatcher.getAllDrivers.useQuery(undefined, { enabled: isAuthenticated });
+  const driversQuery = trpc.dispatcher.getDrivers.useQuery(undefined, { enabled: isAuthenticated });
   const activeRidesQuery = trpc.dispatcher.getActiveRides.useQuery(undefined, {
     enabled: isAuthenticated,
     refetchInterval: 5000,
   });
   const historyQuery = trpc.dispatcher.getRideHistory.useQuery(undefined, { enabled: isAuthenticated });
   const clientsQuery = trpc.dispatcher.getAllClientsWithRatings.useQuery(undefined, { enabled: isAuthenticated });
+  const panicAlertsQuery = trpc.panic.getActivePanicAlerts.useQuery(undefined, {
+    enabled: isAuthenticated,
+    refetchInterval: 5000,
+  });
+
   const clientProfileQuery = trpc.dispatcher.getClientProfile.useQuery(
     { clientId: selectedClientId! },
     { enabled: !!selectedClientId }
@@ -70,7 +77,7 @@ export default function Dispatcher() {
   const addDriverMut = trpc.dispatcher.addDriver.useMutation({
     onSuccess: () => {
       toast.success("Șofer adăugat cu succes!");
-      utils.dispatcher.getAllDrivers.invalidate();
+      utils.dispatcher.getDrivers.invalidate();
       setNewDriver({ username: "", password: "", name: "", phone: "", carPlate: "", carBrand: "" });
       setAddDriverOpen(false);
     },
@@ -80,7 +87,7 @@ export default function Dispatcher() {
   const deleteDriverMut = trpc.dispatcher.deleteDriver.useMutation({
     onSuccess: () => {
       toast.success("Șofer șters!");
-      utils.dispatcher.getAllDrivers.invalidate();
+      utils.dispatcher.getDrivers.invalidate();
     },
     onError: (e) => toast.error(e.message),
   });
@@ -142,7 +149,7 @@ export default function Dispatcher() {
     });
 
     const unsubDriverStatus = on("driver:status", (data: { driverId: number; status: string }) => {
-      utils.dispatcher.getAllDrivers.invalidate();
+      utils.dispatcher.getDrivers.invalidate();
     });
 
     const unsubRideNew = on("ride:new", (data: any) => {
@@ -491,7 +498,7 @@ export default function Dispatcher() {
           </div>
 
           <Tabs defaultValue="pending" className="flex flex-col flex-1 overflow-hidden">
-            <TabsList className="grid grid-cols-4 m-3 bg-gray-800">
+            <TabsList className="grid grid-cols-5 m-3 bg-gray-800">
               <TabsTrigger value="pending" className="data-[state=active]:bg-yellow-500 data-[state=active]:text-black text-xs">
                 <Car className="w-3 h-3 mr-1" /> Așteptare
                 {pendingRides.length > 0 && (
@@ -513,6 +520,14 @@ export default function Dispatcher() {
               </TabsTrigger>
               <TabsTrigger value="clients" className="data-[state=active]:bg-yellow-500 data-[state=active]:text-black text-xs">
                 <Users className="w-3 h-3 mr-1" /> Clienți
+              </TabsTrigger>
+              <TabsTrigger value="panic" className="data-[state=active]:bg-red-600 data-[state=active]:text-white text-xs">
+                <span className="text-lg mr-1">🚨</span> Urgență
+                {panicAlertsQuery.data && panicAlertsQuery.data.length > 0 && (
+                  <span className="ml-1 bg-red-600 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center font-bold animate-pulse">
+                    {panicAlertsQuery.data.length}
+                  </span>
+                )}
               </TabsTrigger>
             </TabsList>
 
@@ -762,6 +777,48 @@ export default function Dispatcher() {
               ) : (
                 <div className="text-center py-4 text-gray-400">
                   <p>Niciun client</p>
+                </div>
+              )}
+            </TabsContent>
+
+            {/* Panic Alerts Tab */}
+            <TabsContent value="panic" className="flex-1 overflow-y-auto px-3 pb-3 mt-0">
+              <h3 className="text-sm font-semibold text-red-400 mb-3 flex items-center gap-2">
+                <span className="text-lg">🚨</span> Alerte de Urgență
+              </h3>
+              {panicAlertsQuery.data && panicAlertsQuery.data.length > 0 ? (
+                panicAlertsQuery.data.map((alert: any) => (
+                  <Card
+                    key={alert.id}
+                    className={`mb-2 cursor-pointer transition-colors ${
+                      selectedPanicAlertId === alert.id
+                        ? "bg-red-900 border-red-600"
+                        : "bg-gray-800 border-red-700 hover:bg-gray-750"
+                    }`}
+                    onClick={() => setSelectedPanicAlertId(alert.id)}
+                  >
+                    <CardContent className="p-3">
+                      <div className="flex items-start justify-between">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2">
+                            <span className="text-lg animate-pulse">🚨</span>
+                            <p className="text-white text-sm font-bold">Șofer #{alert.driverId}</p>
+                            <Badge className="bg-red-600 text-white text-xs">{alert.status}</Badge>
+                          </div>
+                          <p className="text-gray-300 text-xs mt-1 flex items-center gap-1">
+                            <MapPin className="w-3 h-3" /> {alert.driverAddress || "Locație necunoscută"}
+                          </p>
+                          <p className="text-gray-500 text-xs">
+                            {new Date(alert.createdAt).toLocaleString("ro-RO")}
+                          </p>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))
+              ) : (
+                <div className="text-center py-4 text-gray-400">
+                  <p>Nicio alertă de urgență</p>
                 </div>
               )}
             </TabsContent>

@@ -54,6 +54,8 @@ export default function DriverApp() {
   const [ratingValue, setRatingValue] = useState(5);
   const [ratingComment, setRatingComment] = useState("");
   const [acceptanceCountdown, setAcceptanceCountdown] = useState<number | null>(null); // 30, 29, ..., 0
+  const [showPanicConfirm, setShowPanicConfirm] = useState(false);
+  const [panicAlertId, setPanicAlertId] = useState<number | null>(null);
 
   // Map
   const [mapReady, setMapReady] = useState(false);
@@ -136,6 +138,25 @@ export default function DriverApp() {
 
   const updateStatusMut = trpc.driver.updateStatus.useMutation();
 
+  const triggerPanicMut = trpc.panic.triggerAlert.useMutation({
+    onSuccess: (alert) => {
+      setPanicAlertId(alert.id);
+      setShowPanicConfirm(false);
+      toast.success("Alertă de urgență trimisă dispatcherului!", {
+        description: "Dispatcherul a fost notificat cu locația ta.",
+      });
+    },
+    onError: (e) => toast.error("Eroare la trimiterea alertei: " + e.message),
+  });
+
+  const cancelPanicMut = trpc.panic.cancelPanicAlert.useMutation({
+    onSuccess: () => {
+      setPanicAlertId(null);
+      toast.info("Alertă de urgență anulată.");
+    },
+    onError: (e) => toast.error("Eroare: " + e.message),
+  });
+
   const submitRatingMut = trpc.driver.submitRating.useMutation({
     onSuccess: () => {
       toast.success("Rating trimis! Clientul va vedea evaluarea.");
@@ -148,7 +169,7 @@ export default function DriverApp() {
     onError: (e) => toast.error(e.message),
   });
 
-  const activeRideQuery = trpc.driver.getActiveRide.useQuery(
+  const activeRideQuery = trpc.clientApp.getActiveRide.useQuery(
     { token: session?.token ?? "" },
     { enabled: !!session, refetchInterval: 15000 }
   );
@@ -589,16 +610,26 @@ export default function DriverApp() {
                 <span className="text-blue-400 text-xs">Navigare</span>
               </div>
             </div>
-            <Button
-              className="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-5"
-              onClick={() => {
-                completeRideMut.mutate({ token: session.token, rideId: activeRide.id || activeRide.rideId });
-              }}
-              disabled={completeRideMut.isPending}
-            >
-              <CheckCircle className="w-5 h-5 mr-2" />
-              {completeRideMut.isPending ? "Se finalizează..." : "Cursă Finalizată"}
-            </Button>
+            <div className="grid grid-cols-2 gap-3">
+              <Button
+                className="bg-green-600 hover:bg-green-700 text-white font-bold py-5"
+                onClick={() => {
+                  completeRideMut.mutate({ token: session.token, rideId: activeRide.id || activeRide.rideId });
+                }}
+                disabled={completeRideMut.isPending}
+              >
+                <CheckCircle className="w-5 h-5 mr-2" />
+                Finalizată
+              </Button>
+              <Button
+                className="bg-red-600 hover:bg-red-700 text-white font-bold py-5"
+                onClick={() => setShowPanicConfirm(true)}
+                disabled={!!panicAlertId}
+              >
+                <span className="text-lg mr-1">🚨</span>
+                {panicAlertId ? "Alertat" : "Urgență"}
+              </Button>
+            </div>
           </div>
         )}
 
@@ -673,6 +704,73 @@ export default function DriverApp() {
               </div>
             </CardContent>
           </Card>
+        </div>
+      )}
+
+      {/* Panic Confirmation Modal */}
+      {showPanicConfirm && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <Card className="w-96 bg-gray-900 border-red-700">
+            <CardHeader>
+              <CardTitle className="text-red-400 flex items-center gap-2">
+                <span className="text-2xl">🚨</span>
+                Alertă de Urgență
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <p className="text-gray-300">
+                Ești sigur că vrei să trimiți o alertă de urgență dispatcherului? Locația ta va fi trimisă imediat.
+              </p>
+              <div className="flex gap-3">
+                <Button
+                  className="flex-1 bg-red-600 hover:bg-red-700 text-white"
+                  onClick={() => {
+                    if (session && driverPos) {
+                      triggerPanicMut.mutate({
+                        driverId: session.driverId,
+                        lat: driverPos.lat,
+                        lng: driverPos.lng,
+                        address: "Locație curentă",
+                        rideId: activeRide?.id || activeRide?.rideId,
+                      });
+                    }
+                  }}
+                  disabled={triggerPanicMut.isPending}
+                >
+                  {triggerPanicMut.isPending ? "Se trimite..." : "Trimite Alertă"}
+                </Button>
+                <Button
+                  variant="outline"
+                  className="flex-1 border-gray-600 text-gray-300"
+                  onClick={() => setShowPanicConfirm(false)}
+                >
+                  Anulează
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {/* Panic Alert Status */}
+      {panicAlertId && (
+        <div className="fixed bottom-4 left-4 bg-red-900 border border-red-700 rounded-lg p-4 max-w-sm">
+          <div className="flex items-start gap-3">
+            <span className="text-2xl animate-pulse">🚨</span>
+            <div className="flex-1">
+              <p className="text-red-200 font-bold">Alertă Activă</p>
+              <p className="text-red-300 text-sm">Dispatcherul a fost notificat. Așteptă instrucțiuni.</p>
+              <Button
+                size="sm"
+                variant="outline"
+                className="mt-2 border-red-700 text-red-300 hover:bg-red-800"
+                onClick={() => cancelPanicMut.mutate({ alertId: panicAlertId })}
+                disabled={cancelPanicMut.isPending}
+              >
+                {cancelPanicMut.isPending ? "Se anulează..." : "Anulează Alertă"}
+              </Button>
+            </div>
+          </div>
         </div>
       )}
     </div>

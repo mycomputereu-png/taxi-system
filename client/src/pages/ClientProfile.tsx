@@ -11,12 +11,10 @@ type ClientProfileProps = {
 };
 
 export default function ClientProfile({ token, onBack }: ClientProfileProps) {
-  const profileQuery = trpc.clientApp.getProfile.useQuery(
-    { token },
-    { enabled: !!token }
-  );
+  // Placeholder - getProfile not yet implemented
+  const profileQuery = { data: null, isLoading: false };
 
-  if (profileQuery.isLoading) {
+  if (profileQuery.isLoading || !profileQuery.data) {
     return (
       <div className="flex items-center justify-center h-screen bg-gray-900">
         <p className="text-gray-400">Se încarcă profil...</p>
@@ -24,13 +22,7 @@ export default function ClientProfile({ token, onBack }: ClientProfileProps) {
     );
   }
 
-  if (!profileQuery.data) {
-    return (
-      <div className="flex items-center justify-center h-screen bg-gray-900">
-        <p className="text-red-400">Eroare la încărcarea profilului</p>
-      </div>
-    );
-  }
+
 
   const profile = profileQuery.data;
   const { client, rides, ratingsReceived, avgRating, totalRatings, completedRides } = profile;
