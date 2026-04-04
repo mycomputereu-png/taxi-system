@@ -331,9 +331,11 @@ export const appRouter = router({
           destinationLng: input.destinationLng?.toString(),
           destinationAddress: input.destinationAddress,
         });
-        emitToDispatchers("ride:created", {
+        emitToDispatchers("ride:new", {
           rideId: ride.id,
           clientId: client.id,
+          clientPhone: client.phone,
+          clientName: client.name,
           lat: input.clientLat,
           lng: input.clientLng,
           address: input.clientAddress,

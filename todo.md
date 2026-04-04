@@ -173,3 +173,12 @@
 - [x] Remove online drivers panel from below map
 - [x] Verify map displays without driver info panel
 - [x] Test and verify layout
+
+
+## 🐛 BUG: Client location not appearing on dispatcher map
+- [x] Investigate Socket.IO client:location event flow
+- [x] Found mismatch: server emits 'ride:created' but dispatcher listens for 'ride:new'
+- [x] Changed event name from 'ride:created' to 'ride:new' in server/routers.ts
+- [x] Added clientPhone and clientName to event payload
+- [x] Verified client auth:client is emitted after OTP verification
+- [x] Test end-to-end: client request -> dispatcher receives location -> marker appears
