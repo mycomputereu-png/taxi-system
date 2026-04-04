@@ -140,10 +140,12 @@ export default function Dispatcher() {
     }
 
     const unsubDriverLoc = on("driver:location", (data: { driverId: number; lat: number; lng: number }) => {
+      console.log("[Dispatcher] driver:location event received:", data);
       setDriverLocations((prev) => {
         const next = new Map(prev);
         const existing = next.get(data.driverId);
         next.set(data.driverId, { ...(existing || { id: data.driverId, name: "", status: "available" }), lat: data.lat, lng: data.lng });
+        console.log("[Dispatcher] Updated driver locations:", next);
         return next;
       });
     });
@@ -238,10 +240,12 @@ export default function Dispatcher() {
 
   // Update map markers
   useEffect(() => {
+    console.log("[Dispatcher] Map marker update effect triggered, mapReady:", mapReady, "driverLocations:", driverLocations.size);
     if (!mapReady || !mapRef.current) return;
 
     // Driver markers (green with arrow)
     driverLocations.forEach((d) => {
+      console.log("[Dispatcher] Rendering driver marker for driver", d.id, "at", d.lat, d.lng);
       let marker = driverMarkersRef.current.get(d.id);
       if (!marker) {
         marker = new google.maps.Marker({
@@ -342,11 +346,13 @@ export default function Dispatcher() {
   }, []);
 
   const handleMapReady = useCallback((map: google.maps.Map) => {
+    console.log("[Dispatcher] Map ready callback triggered");
     mapRef.current = map;
     setMapReady(true);
     // Set initial view to Bucharest
     map.setCenter({ lat: 44.4268, lng: 26.1025 });
     map.setZoom(13);
+    console.log("[Dispatcher] Map initialized and centered");
     // Add map styles for better visibility
     map.setOptions({
       styles: [
@@ -853,8 +859,27 @@ export default function Dispatcher() {
         </div>
 
         {/* Map */}
-        <div className="flex-1 relative">
-          <MapView onMapReady={handleMapReady} className="w-full h-full" />
+        <div className="flex-1 relative flex flex-col">
+          <MapView onMapReady={handleMapReady} className="flex-1 w-full" />
+
+          {/* Driver Info Panel */}
+          <div className="bg-gray-900 border-t border-gray-800 p-3 max-h-32 overflow-y-auto">
+            <h3 className="text-xs font-semibold text-gray-300 mb-2">Soferi Online ({driverLocations.size})</h3>
+            <div className="flex gap-2 overflow-x-auto">
+              {Array.from(driverLocations.values()).map((driver) => (
+                <div key={driver.id} className="flex-shrink-0 bg-gray-800 border border-gray-700 rounded p-2 min-w-max">
+                  <p className="text-xs font-medium text-white">{driver.name || `Sofer #${driver.id}`}</p>
+                  <p className="text-xs text-gray-400">Lat: {driver.lat.toFixed(4)}</p>
+                  <p className="text-xs text-gray-400">Lng: {driver.lng.toFixed(4)}</p>
+                  <p className={`text-xs font-semibold ${
+                    driver.status === 'available' ? 'text-green-400' : 'text-yellow-400'
+                  }`}>
+                    {driver.status === 'available' ? 'Disponibil' : 'Ocupat'}
+                  </p>
+                </div>
+              ))}
+            </div>
+          </div>
 
           {/* Map Legend */}
           <div className="absolute top-4 right-4 bg-gray-900 bg-opacity-90 rounded-lg p-3 text-xs text-white border border-gray-700">
