@@ -83,9 +83,11 @@ export default function ClientApp() {
 
   const requestRideMut = trpc.clientApp.requestRide.useMutation({
     onSuccess: (data) => {
-      setRideId(data.ride.id);
-      setRideStatus("pending");
-      toast.success("Cerere trimisă la dispatcher!");
+      if (data?.ride?.id) {
+        setRideId(data.ride.id);
+        setRideStatus("pending");
+        toast.success("Cerere trimisă la dispatcher!");
+      }
     },
     onError: (e) => toast.error(e.message),
   });
@@ -109,10 +111,12 @@ export default function ClientApp() {
   useEffect(() => {
     if (!activeRideQuery.data) return;
     const ride = activeRideQuery.data;
-    setRideId(ride.id);
-    setRideStatus(ride.status as RideStatus);
-    if (ride.driver) setDriverInfo(ride.driver);
-    if (ride.estimatedArrival) setEstimatedArrival(ride.estimatedArrival);
+    if (ride?.id) {
+      setRideId(ride.id);
+      setRideStatus(ride.status as RideStatus);
+      if (ride.driver) setDriverInfo(ride.driver);
+      if (ride.estimatedArrival) setEstimatedArrival(ride.estimatedArrival);
+    }
   }, [activeRideQuery.data]);
 
   // Socket.IO auth and events
