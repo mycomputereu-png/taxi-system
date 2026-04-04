@@ -12,8 +12,9 @@ import { toast } from "sonner";
 import { getLoginUrl } from "@/const";
 import { useSocket, getSocket } from "@/hooks/useSocket";
 import {
-  MapPin, Users, Car, Clock, Plus, Trash2, LogOut, CheckCircle, XCircle, Navigation
+  MapPin, Users, Car, Clock, Plus, Trash2, LogOut, CheckCircle, XCircle, Navigation, Star, Phone, ArrowLeft
 } from "lucide-react";
+
 
 type DriverMarker = {
   id: number;
@@ -48,6 +49,9 @@ export default function Dispatcher() {
   const [assignDialogOpen, setAssignDialogOpen] = useState(false);
   const [newDriver, setNewDriver] = useState({ username: "", password: "", name: "", phone: "" });
   const [addDriverOpen, setAddDriverOpen] = useState(false);
+  const [selectedClientId, setSelectedClientId] = useState<number | null>(null);
+  const [ratingsSortBy, setRatingsSortBy] = useState<"newest" | "oldest" | "highest" | "lowest">("newest");
+  const [ridesSortBy, setRidesSortBy] = useState<"newest" | "oldest" | "completed" | "cancelled">("newest");
 
   // tRPC queries
   const utils = trpc.useUtils();
@@ -58,6 +62,10 @@ export default function Dispatcher() {
   });
   const historyQuery = trpc.dispatcher.getRideHistory.useQuery(undefined, { enabled: isAuthenticated });
   const clientsQuery = trpc.dispatcher.getAllClientsWithRatings.useQuery(undefined, { enabled: isAuthenticated });
+  const clientProfileQuery = trpc.dispatcher.getClientProfile.useQuery(
+    { clientId: selectedClientId! },
+    { enabled: !!selectedClientId }
+  );
 
   const addDriverMut = trpc.dispatcher.addDriver.useMutation({
     onSuccess: () => {
@@ -93,6 +101,19 @@ export default function Dispatcher() {
       utils.dispatcher.getActiveRides.invalidate();
     },
   });
+
+  // Invalidate client profile when client ratings change
+  useEffect(() => {
+    if (!socketRef.current) return;
+    const handleClientRated = () => {
+      utils.dispatcher.getClientProfile.invalidate();
+      utils.dispatcher.getAllClientsWithRatings.invalidate();
+    };
+    socketRef.current.on("client:rated", handleClientRated);
+    return () => {
+      socketRef.current?.off("client:rated", handleClientRated);
+    };
+  }, [socketRef, utils]);
 
   // Socket.IO setup
   useEffect(() => {
@@ -692,7 +713,11 @@ export default function Dispatcher() {
               <h3 className="text-sm font-semibold text-gray-300 mb-3">Clienți și rating-uri</h3>
               {clientsQuery.data && clientsQuery.data.length > 0 ? (
                 clientsQuery.data.map((item: any) => (
-                  <Card key={item.client.id} className="mb-2 bg-gray-800 border-gray-700">
+                  <Card
+                    key={item.client.id}
+                    className="mb-2 bg-gray-800 border-gray-700 cursor-pointer hover:bg-gray-750 hover:border-gray-600 transition-colors"
+                    onClick={() => setSelectedClientId(item.client.id)}
+                  >
                     <CardContent className="p-3">
                       <div className="flex items-start justify-between">
                         <div className="flex-1">
@@ -778,6 +803,182 @@ export default function Dispatcher() {
           </div>
         </div>
       </div>
+
+      {/* Client Profile Dialog */}
+      <Dialog open={!!selectedClientId} onOpenChange={(open) => !open && setSelectedClientId(null)}>
+        <DialogContent className="bg-gray-900 border-gray-700 text-white max-h-screen overflow-y-auto max-w-2xl">
+          {clientProfileQuery.isLoading ? (
+            <div className="flex items-center justify-center py-8">
+              <p className="text-gray-400">Se încarcă profil...</p>
+            </div>
+          ) : clientProfileQuery.data ? (
+            <>
+              <DialogHeader>
+                <DialogTitle className="flex items-center gap-2">
+                  <span>Profil Client</span>
+                </DialogTitle>
+              </DialogHeader>
+              <div className="space-y-4">
+                {/* Client Info */}
+                <div className="border border-gray-700 rounded-lg p-3 bg-gray-800">
+                  <div className="flex items-start justify-between mb-2">
+                    <div>
+                      <p className="text-white font-medium">{clientProfileQuery.data.client.name || clientProfileQuery.data.client.phone}</p>
+                      <p className="text-gray-400 text-sm flex items-center gap-1">
+                        <Phone className="w-4 h-4" />
+                        {clientProfileQuery.data.client.phone}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-3 gap-2 pt-2 border-t border-gray-700 mt-2">
+                    <div>
+                      <p className="text-gray-400 text-xs">Total Curse</p>
+                      <p className="text-lg font-bold text-white">{clientProfileQuery.data.rides.length}</p>
+                    </div>
+                    <div>
+                      <p className="text-gray-400 text-xs">Finalizate</p>
+                      <p className="text-lg font-bold text-green-400">{clientProfileQuery.data.completedRides}</p>
+                    </div>
+                    <div>
+                      <p className="text-gray-400 text-xs">Rating Mediu</p>
+                      <p className="text-lg font-bold text-yellow-400">{clientProfileQuery.data.avgRating.toFixed(1)}/5</p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Ratings */}
+                {clientProfileQuery.data.totalRatings > 0 && (
+                  <div>
+                    <div className="flex items-center justify-between mb-2">
+                      <h3 className="text-sm font-semibold text-gray-300 flex items-center gap-1">
+                        <Star className="w-4 h-4" />
+                        Evaluări Primite ({clientProfileQuery.data.totalRatings})
+                      </h3>
+                      <select
+                        value={ratingsSortBy}
+                        onChange={(e) => setRatingsSortBy(e.target.value as any)}
+                        className="text-xs bg-gray-800 border border-gray-700 text-gray-300 rounded px-2 py-1"
+                      >
+                        <option value="newest">Cea mai nouă</option>
+                        <option value="oldest">Cea mai veche</option>
+                        <option value="highest">Rating cel mai înalt</option>
+                        <option value="lowest">Rating cel mai scăzut</option>
+                      </select>
+                    </div>
+                    <div className="space-y-2 max-h-48 overflow-y-auto">
+                      {clientProfileQuery.data.ratingsReceived
+                        .sort((a, b) => {
+                          if (ratingsSortBy === "newest") return new Date(b.rating.createdAt).getTime() - new Date(a.rating.createdAt).getTime();
+                          if (ratingsSortBy === "oldest") return new Date(a.rating.createdAt).getTime() - new Date(b.rating.createdAt).getTime();
+                          if (ratingsSortBy === "highest") return b.rating.rating - a.rating.rating;
+                          if (ratingsSortBy === "lowest") return a.rating.rating - b.rating.rating;
+                          return 0;
+                        })
+                        .map((item, idx) => (
+                        <div key={idx} className="border border-gray-700 rounded-lg p-2 bg-gray-800">
+                          <div className="flex items-start justify-between mb-1">
+                            <div className="flex gap-0.5">
+                              {[1, 2, 3, 4, 5].map((star) => (
+                                <span
+                                  key={star}
+                                  className={`text-sm ${
+                                    star <= item.rating.rating ? "text-yellow-400" : "text-gray-600"
+                                  }`}
+                                >
+                                  ★
+                                </span>
+                              ))}
+                            </div>
+                            <span className="text-gray-500 text-xs">
+                              {new Date(item.rating.createdAt).toLocaleDateString("ro-RO")}
+                            </span>
+                          </div>
+                          {item.driver && (
+                            <p className="text-gray-400 text-xs mb-1">De la: <span className="text-white">{item.driver.name}</span></p>
+                          )}
+                          {item.rating.comment && (
+                            <p className="text-gray-300 text-xs">{item.rating.comment}</p>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Ride History */}
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <h3 className="text-sm font-semibold text-gray-300">Istoric Curse ({clientProfileQuery.data.rides.length})</h3>
+                    <select
+                      value={ridesSortBy}
+                      onChange={(e) => setRidesSortBy(e.target.value as any)}
+                      className="text-xs bg-gray-800 border border-gray-700 text-gray-300 rounded px-2 py-1"
+                    >
+                      <option value="newest">Cea mai nouă</option>
+                      <option value="oldest">Cea mai veche</option>
+                      <option value="completed">Finalizate</option>
+                      <option value="cancelled">Anulate</option>
+                    </select>
+                  </div>
+                  <div className="space-y-2 max-h-48 overflow-y-auto">
+                    {clientProfileQuery.data.rides.length > 0 ? (
+                      clientProfileQuery.data.rides
+                        .sort((a, b) => {
+                          if (ridesSortBy === "newest") return new Date(b.ride.createdAt).getTime() - new Date(a.ride.createdAt).getTime();
+                          if (ridesSortBy === "oldest") return new Date(a.ride.createdAt).getTime() - new Date(b.ride.createdAt).getTime();
+                          if (ridesSortBy === "completed") return (b.ride.status === "completed" ? 1 : 0) - (a.ride.status === "completed" ? 1 : 0);
+                          if (ridesSortBy === "cancelled") return (b.ride.status === "cancelled" ? 1 : 0) - (a.ride.status === "cancelled" ? 1 : 0);
+                          return 0;
+                        })
+                        .map((item, idx) => (
+                        <div key={idx} className="border border-gray-700 rounded-lg p-2 bg-gray-800">
+                          <div className="flex items-start justify-between mb-1">
+                            <p className="text-white text-sm font-medium">Cursa #{item.ride.id}</p>
+                            <Badge
+                              variant="outline"
+                              className={`text-xs ${
+                                item.ride.status === "completed"
+                                  ? "bg-green-900 text-green-300 border-green-700"
+                                  : item.ride.status === "cancelled"
+                                  ? "bg-red-900 text-red-300 border-red-700"
+                                  : "bg-gray-700 text-gray-300 border-gray-600"
+                              }`}
+                            >
+                              {item.ride.status === "completed"
+                                ? "Finalizată"
+                                : item.ride.status === "cancelled"
+                                ? "Anulată"
+                                : item.ride.status}
+                            </Badge>
+                          </div>
+                          <p className="text-gray-400 text-xs mb-1">
+                            {new Date(item.ride.createdAt).toLocaleDateString("ro-RO")}
+                          </p>
+                          {item.driver && (
+                            <p className="text-gray-400 text-xs mb-1">Șofer: <span className="text-white">{item.driver.name}</span></p>
+                          )}
+                          {item.ride.clientAddress && (
+                            <p className="text-gray-400 text-xs flex items-start gap-1">
+                              <MapPin className="w-3 h-3 flex-shrink-0 mt-0.5" />
+                              {item.ride.clientAddress}
+                            </p>
+                          )}
+                        </div>
+                      ))
+                    ) : (
+                      <p className="text-gray-400 text-xs text-center py-2">Nicio cursă</p>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </>
+          ) : (
+            <div className="text-center py-8 text-red-400">
+              <p>Eroare la încărcarea profilului</p>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
 
       {/* Assign Ride Dialog */}
       <Dialog open={assignDialogOpen} onOpenChange={setAssignDialogOpen}>

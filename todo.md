@@ -1,5 +1,13 @@
 # Taxi System - TODO
 
+## ✅ COMPLETAT: Sistem complet de taxi cu trei aplicații web
+- Dispatcher: gestionare curse, șoferi, și clienți cu rating-uri
+- Client: login OTP, cheamă taxi, tracking live șofer
+- Șofer: login, acceptare curse, rating clienți, navigare
+- WebSocket real-time cu Socket.IO
+- Google Maps cu marcatori și rute
+- Sistem de rating clienți cu istoric complet
+
 ## Backend & Database
 - [x] Schema DB: tabele drivers, clients, rides, locations, otp_codes
 - [x] Migrare SQL și aplicare în DB
@@ -70,3 +78,13 @@
 - [x] Adaugă UI rating pe aplicația Șofer (după finalizare cursă)
 - [x] Adaugă tab "Clienți" în Dispatcher cu lista și rating-uri
 - [x] Afișare clienți cu probleme (rating scăzut) în Dispatcher
+- [x] Extinde backend getClientProfile cu driver info în ratings
+- [x] Adaugă modal profil client în Dispatcher cu detalii complete
+- [x] Adaugă query backend pentru istoric curse client cu ratinguri primite
+- [x] Adaugă procedure tRPC pentru getClientProfile (dispatcher.getClientProfile)
+- [x] Construieste pagina profil client cu istoric curse (ClientProfile.tsx)
+- [x] Afișare ratinguri primite de client de la șoferi cu driver info
+- [x] Adaugă modal profil client în Dispatcher cu click pe card client
+- [x] Adaugă sorting/filtering pentru ratinguri (newest, oldest, highest, lowest)
+- [x] Adaugă sorting/filtering pentru curse (newest, oldest, completed, cancelled)
+- [x] Teste Vitest pentru dispatcher.getClientProfile (9 teste trec)

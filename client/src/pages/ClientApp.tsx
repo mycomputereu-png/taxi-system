@@ -7,7 +7,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import { useSocket } from "@/hooks/useSocket";
-import { Phone, MapPin, Car, Clock, CheckCircle, XCircle, Navigation } from "lucide-react";
+import { Phone, MapPin, Car, Clock, CheckCircle, XCircle, Navigation, User } from "lucide-react";
+import ClientProfile from "./ClientProfile";
 
 type ClientSession = { token: string; clientId: number; phone: string };
 
@@ -47,6 +48,9 @@ export default function ClientApp() {
   const [rideId, setRideId] = useState<number | null>(null);
   const [driverInfo, setDriverInfo] = useState<any>(null);
   const [estimatedArrival, setEstimatedArrival] = useState<number | null>(null);
+
+  // Profile state
+  const [showProfile, setShowProfile] = useState(false);
 
   // Map state
   const [mapReady, setMapReady] = useState(false);

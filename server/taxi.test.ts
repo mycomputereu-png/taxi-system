@@ -31,6 +31,9 @@ vi.mock("./db", () => ({
   getDriverActiveRide: vi.fn(),
   getUserByOpenId: vi.fn(),
   upsertUser: vi.fn(),
+  getClientProfile: vi.fn(),
+  getAllClientsWithRatings: vi.fn(),
+  submitClientRating: vi.fn(),
 }));
 
 vi.mock("./socket", () => ({
@@ -156,5 +159,109 @@ describe("dispatcher.addDriver", () => {
     });
 
     expect(result.success).toBe(true);
+  });
+});
+
+describe("dispatcher.getClientProfile", () => {
+  it("requires authentication", async () => {
+    const ctx = createMockContext(); // no user
+    const caller = appRouter.createCaller(ctx);
+
+    await expect(
+      caller.dispatcher.getClientProfile({ clientId: 1 })
+    ).rejects.toThrow();
+  });
+
+  it("returns client profile with rides and ratings", async () => {
+    const { getClientProfile } = await import("./db");
+    vi.mocked(getClientProfile).mockResolvedValue({
+      client: {
+        id: 1,
+        phone: "+40712345678",
+        name: "Test Client",
+        currentLat: null,
+        currentLng: null,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+      rides: [
+        {
+          ride: {
+            id: 1,
+            clientId: 1,
+            driverId: 1,
+            status: "completed",
+            clientLat: null,
+            clientLng: null,
+            clientAddress: "Test Address",
+            destinationLat: null,
+            destinationLng: null,
+            destinationAddress: null,
+            estimatedArrival: null,
+            notes: null,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+            acceptedAt: null,
+            completedAt: new Date(),
+          },
+          driver: {
+            id: 1,
+            username: "driver1",
+            passwordHash: "hash",
+            name: "Test Driver",
+            phone: null,
+            status: "available",
+            currentLat: null,
+            currentLng: null,
+            lastLocationUpdate: null,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          },
+        },
+      ],
+      ratingsReceived: [
+        {
+          rating: {
+            id: 1,
+            clientId: 1,
+            driverId: 1,
+            rideId: 1,
+            rating: 5,
+            comment: "Great client",
+            createdAt: new Date(),
+          },
+          driver: {
+            id: 1,
+            username: "driver1",
+            passwordHash: "hash",
+            name: "Test Driver",
+            phone: null,
+            status: "available",
+            currentLat: null,
+            currentLng: null,
+            lastLocationUpdate: null,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          },
+        },
+      ],
+      avgRating: 5,
+      totalRatings: 1,
+      completedRides: 1,
+    });
+
+    const ctx = createMockContext({
+      id: 1, openId: "admin", name: "Admin", email: null, loginMethod: null,
+      role: "admin", createdAt: new Date(), updatedAt: new Date(), lastSignedIn: new Date(),
+    });
+    const caller = appRouter.createCaller(ctx);
+    const result = await caller.dispatcher.getClientProfile({ clientId: 1 });
+
+    expect(result.client.phone).toBe("+40712345678");
+    expect(result.avgRating).toBe(5);
+    expect(result.totalRatings).toBe(1);
+    expect(result.completedRides).toBe(1);
+    expect(result.rides.length).toBe(1);
+    expect(result.ratingsReceived.length).toBe(1);
   });
 });

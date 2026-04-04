@@ -408,3 +408,54 @@ export async function getAllClientsWithRatings() {
     .groupBy(clients.id);
   return result;
 }
+
+
+// ─── Client Profile ──────────────────────────────────────────────────────────
+
+export async function getClientProfile(clientId: number) {
+  const db = await getDb();
+  if (!db) return null;
+  
+  const client = await db.select().from(clients).where(eq(clients.id, clientId)).limit(1);
+  if (!client[0]) return null;
+
+  // Get all rides for this client with driver info
+  const clientRides = await db
+    .select({
+      ride: rides,
+      driver: drivers,
+    })
+    .from(rides)
+    .leftJoin(drivers, eq(rides.driverId, drivers.id))
+    .where(eq(rides.clientId, clientId))
+    .orderBy(desc(rides.createdAt));
+
+  // Get all ratings received by this client with driver info
+  const ratingsReceived = await db
+    .select({
+      rating: clientRatings,
+      driver: drivers,
+    })
+    .from(clientRatings)
+    .leftJoin(drivers, eq(clientRatings.driverId, drivers.id))
+    .where(eq(clientRatings.clientId, clientId))
+    .orderBy(desc(clientRatings.createdAt));
+
+  // Calculate average rating
+  const { sql } = await import("drizzle-orm");
+  const avgRatingResult = await db
+    .select({ avg: sql<number>`AVG(${clientRatings.rating})` })
+    .from(clientRatings)
+    .where(eq(clientRatings.clientId, clientId));
+  
+  const avgRating = avgRatingResult[0]?.avg ? Math.round(avgRatingResult[0].avg * 10) / 10 : 0;
+
+  return {
+    client: client[0],
+    rides: clientRides,
+    ratingsReceived,
+    avgRating,
+    totalRatings: ratingsReceived.length,
+    completedRides: clientRides.filter(r => r.ride.status === "completed").length,
+  };
+}

@@ -33,6 +33,7 @@ import {
   getUserByOpenId,
   submitClientRating,
   getAllClientsWithRatings,
+  getClientProfile,
 } from "./db";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
@@ -291,6 +292,16 @@ export const appRouter = router({
         if (ride.driverId) emitToDriver(ride.driverId, "ride:cancelled", { rideId: ride.id });
         return { success: true };
       }),
+
+    getProfile: publicProcedure
+      .input(z.object({ token: z.string() }))
+      .query(async ({ input }) => {
+        const client = await getClientByToken(input.token);
+        if (!client) throw new TRPCError({ code: "UNAUTHORIZED" });
+        const profile = await getClientProfile(client.id);
+        if (!profile) throw new TRPCError({ code: "NOT_FOUND" });
+        return profile;
+      }),
   }),
 
   // ─── Dispatcher (protected) ─────────────────────────────────────────────────
@@ -424,6 +435,14 @@ export const appRouter = router({
     getAllClientsWithRatings: protectedProcedure.query(async () => {
       return getAllClientsWithRatings();
     }),
+
+    getClientProfile: protectedProcedure
+      .input(z.object({ clientId: z.number() }))
+      .query(async ({ input }) => {
+        const profile = await getClientProfile(input.clientId);
+        if (!profile) throw new TRPCError({ code: "NOT_FOUND" });
+        return profile;
+      }),
   }),
 });
 
