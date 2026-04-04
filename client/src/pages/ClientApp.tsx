@@ -37,7 +37,11 @@ export default function ClientApp() {
   const { emit, on } = useSocket();
 
   // Auth state
-  const [session, setSession] = useState<ClientSession | null>(() => loadSession());
+  const [session, setSession] = useState<ClientSession | null>(() => {
+    const s = loadSession();
+    console.log("[ClientApp] Loaded session:", s);
+    return s;
+  });
   const [phone, setPhone] = useState("");
   const [otp, setOtp] = useState("");
   const [otpSent, setOtpSent] = useState(false);
@@ -76,6 +80,8 @@ export default function ClientApp() {
       const s: ClientSession = { token: data.token, clientId: data.client.id, phone: data.client.phone };
       saveSession(s);
       setSession(s);
+      // Emit Socket.IO auth after session is saved
+      emit("auth:client", { token: s.token });
       toast.success("Autentificat cu succes!");
     },
     onError: (e) => toast.error(e.message),
@@ -119,70 +125,64 @@ export default function ClientApp() {
     }
   }, [activeRideQuery.data]);
 
-  // Socket.IO auth and events
+  // Socket.IO auth is now emitted in verifyOtpMut.onSuccess
+
+  // Socket.IO event listeners
   useEffect(() => {
-    if (!session) return;
-    
-    // Dynamic import for socket.io-client
-    import("socket.io-client").then(({ io }) => {
-      const s = io(window.location.origin, {
-        path: "/api/socket.io",
-        transports: ["websocket", "polling"],
-      });
-
-      s.on("connect", () => {
-        s.emit("auth:client", { token: session.token });
-      });
-
-      s.on("ride:assigned", (data: any) => {
-        setRideStatus("assigned");
-        setDriverInfo(data.driver);
-        toast.success(`Șofer asignat: ${data.driver?.name || "Șofer"}!`);
-      });
-
-      s.on("ride:accepted", (data: any) => {
-        setRideStatus("accepted");
-        setDriverInfo(data.driver);
-        toast.success(`Șoferul ${data.driver?.name} a acceptat cursa!`);
-        if (data.driver?.id) {
-          s.emit("track:driver", { driverId: data.driver.id });
-        }
-      });
-
-      s.on("ride:rejected", () => {
-        setRideStatus("rejected");
-        toast.error("Șoferul a refuzat cursa. Așteptați reasignare...");
-      });
-
-      s.on("ride:completed", () => {
-        setRideStatus("completed");
-        setDriverInfo(null);
-        clearDirections();
-        toast.success("Cursă finalizată! Mulțumim!");
-        setTimeout(() => setRideStatus("idle"), 5000);
-      });
-
-      s.on("ride:cancelled", () => {
-        setRideStatus("cancelled");
-        setDriverInfo(null);
-        clearDirections();
-        toast.info("Cursa a fost anulată");
-        setTimeout(() => setRideStatus("idle"), 3000);
-      });
-
-      s.on("driver:location:update", (data: { driverId: number; lat: number; lng: number }) => {
-        updateDriverMarker(data.lat, data.lng);
-        if (clientPos) {
-          drawRoute({ lat: data.lat, lng: data.lng }, clientPos);
-          calculateETA({ lat: data.lat, lng: data.lng }, clientPos);
-        }
-      });
-
-      return () => s.disconnect();
-    }).catch(err => {
-      console.error("Failed to load socket.io-client:", err);
+    on("ride:assigned", (data: any) => {
+      setRideStatus("assigned");
+      setDriverInfo(data.driver);
+      toast.success(`Șofer asignat: ${data.driver?.name || "Șofer"}!`);
     });
-  }, [session]);
+  }, [on]);
+
+  useEffect(() => {
+    on("ride:accepted", (data: any) => {
+      setRideStatus("accepted");
+      setDriverInfo(data.driver);
+      toast.success(`Șoferul ${data.driver?.name} a acceptat cursa!`);
+      if (data.driver?.id) {
+        emit("track:driver", { driverId: data.driver.id });
+      }
+    });
+  }, [on, emit]);
+
+  useEffect(() => {
+    on("ride:rejected", () => {
+      setRideStatus("rejected");
+      toast.error("Șoferul a refuzat cursa. Așteptați reasignare...");
+    });
+  }, [on]);
+
+  useEffect(() => {
+    on("ride:completed", () => {
+      setRideStatus("completed");
+      setDriverInfo(null);
+      clearDirections();
+      toast.success("Cursă finalizată! Mulțumim!");
+      setTimeout(() => setRideStatus("idle"), 5000);
+    });
+  }, [on]);
+
+  useEffect(() => {
+    on("ride:cancelled", () => {
+      setRideStatus("cancelled");
+      setDriverInfo(null);
+      clearDirections();
+      toast.info("Cursa a fost anulată");
+      setTimeout(() => setRideStatus("idle"), 3000);
+    });
+  }, [on]);
+
+  useEffect(() => {
+    on("driver:location:update", (data: { driverId: number; lat: number; lng: number }) => {
+      updateDriverMarker(data.lat, data.lng);
+      if (clientPos) {
+        drawRoute({ lat: data.lat, lng: data.lng }, clientPos);
+        calculateETA({ lat: data.lat, lng: data.lng }, clientPos);
+      }
+    });
+  }, [on, clientPos, updateDriverMarker, drawRoute, calculateETA]);
 
   // GPS tracking
   useEffect(() => {
