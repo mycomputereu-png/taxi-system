@@ -169,6 +169,7 @@
 
 ## 🎨 UI: Move online drivers section to main Soferi tab
 - [x] Examine Dispatcher layout and identify online drivers section
-- [x] Move online drivers from under map to main Soferi tab
-- [x] Remove duplicate online drivers section from map area
-- [x] Test and verify layout reorganization
+- [x] Revert: Keep online drivers panel below map only (remove from Șoferi tab)
+- [x] Remove "Șoferi Online" section from Șoferi tab
+- [x] Restore online drivers panel below map
+- [x] Test and verify layout
