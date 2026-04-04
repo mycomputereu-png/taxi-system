@@ -60,6 +60,19 @@ async function runMigrations() {
       // Column might already exist, ignore error
     });
     
+    // Add rides columns if they don't exist
+    await db.execute(
+      "ALTER TABLE `rides` ADD COLUMN `assignedAt` timestamp NULL"
+    ).catch(() => {
+      // Column might already exist, ignore error
+    });
+    
+    await db.execute(
+      "ALTER TABLE `rides` ADD COLUMN `acceptanceTimeoutAt` timestamp NULL"
+    ).catch(() => {
+      // Column might already exist, ignore error
+    });
+    
     console.log("[Database] Migrations completed");
   } catch (error) {
     console.warn("[Database] Migration error:", error);
