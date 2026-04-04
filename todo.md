@@ -165,3 +165,10 @@
 ## BUG: Driver Rating Submission Fails
 - [x] Fix clientId undefined when submitting rating from driver app - FIXED: added driver.getActiveRide procedure
 - [x] Ensure activeRide has clientId before submitting rating - Now using driver-specific query
+
+
+## 🐛 BUG: Client location not visible on dispatcher map
+- [x] Debug Socket.IO client:location event transmission - FIXED: Added auth:client emission on mount
+- [x] Verify dispatcher receives client location updates - FIXED: Server broadcasting client:location events
+- [x] Fix client marker rendering on dispatcher map - FIXED: Updated listener to create new entries
+- [x] Test client location visibility - FIXED: Client markers now appear on dispatcher map

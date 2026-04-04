@@ -224,7 +224,12 @@ export default function ClientApp() {
     }
   }, [activeRideQuery.data]);
 
-  // Socket.IO auth is now emitted in verifyOtpMut.onSuccess
+  // Socket.IO auth: emit when session exists (on mount or reconnect)
+  useEffect(() => {
+    if (session?.token) {
+      emit("auth:client", { token: session.token });
+    }
+  }, [session?.token, emit]);
 
   // Socket.IO event listeners
   useEffect(() => {
