@@ -165,3 +165,10 @@
 ## BUG: Driver Rating Submission Fails
 - [x] Fix clientId undefined when submitting rating from driver app - FIXED: added driver.getActiveRide procedure
 - [x] Ensure activeRide has clientId before submitting rating - Now using driver-specific query
+
+
+## 🎨 UI: Move online drivers section to main Soferi tab
+- [x] Examine Dispatcher layout and identify online drivers section
+- [x] Move online drivers from under map to main Soferi tab
+- [x] Remove duplicate online drivers section from map area
+- [x] Test and verify layout reorganization

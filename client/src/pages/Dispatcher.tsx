@@ -741,6 +741,37 @@ export default function Dispatcher() {
                   <p>Niciun șofer înregistrat</p>
                 </div>
               )}
+
+              {/* Online Drivers Section */}
+              {driverLocations.size > 0 && (
+                <div className="mt-6 pt-4 border-t border-gray-700">
+                  <h3 className="text-sm font-semibold text-gray-300 mb-3 flex items-center gap-2">
+                    <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
+                    Șoferi Online ({driverLocations.size})
+                  </h3>
+                  <div className="space-y-2">
+                    {Array.from(driverLocations.values()).map((driver) => (
+                      <Card key={driver.id} className="bg-gray-800 border-gray-700">
+                        <CardContent className="p-3">
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <p className="text-sm font-medium text-white">{driver.name || `Șofer #${driver.id}`}</p>
+                              <p className="text-xs text-gray-400">📍 {driver.lat.toFixed(4)}, {driver.lng.toFixed(4)}</p>
+                            </div>
+                            <Badge
+                              className={`text-xs ${
+                                driver.status === 'available' ? 'bg-green-700' : 'bg-orange-700'
+                              }`}
+                            >
+                              {driver.status === 'available' ? 'Disponibil' : 'Ocupat'}
+                            </Badge>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    ))}
+                  </div>
+                </div>
+              )}
             </TabsContent>
 
             {/* Clients Tab */}
@@ -861,25 +892,6 @@ export default function Dispatcher() {
         {/* Map */}
         <div className="flex-1 relative flex flex-col">
           <MapView onMapReady={handleMapReady} className="flex-1 w-full" />
-
-          {/* Driver Info Panel */}
-          <div className="bg-gray-900 border-t border-gray-800 p-3 max-h-32 overflow-y-auto">
-            <h3 className="text-xs font-semibold text-gray-300 mb-2">Soferi Online ({driverLocations.size})</h3>
-            <div className="flex gap-2 overflow-x-auto">
-              {Array.from(driverLocations.values()).map((driver) => (
-                <div key={driver.id} className="flex-shrink-0 bg-gray-800 border border-gray-700 rounded p-2 min-w-max">
-                  <p className="text-xs font-medium text-white">{driver.name || `Sofer #${driver.id}`}</p>
-                  <p className="text-xs text-gray-400">Lat: {driver.lat.toFixed(4)}</p>
-                  <p className="text-xs text-gray-400">Lng: {driver.lng.toFixed(4)}</p>
-                  <p className={`text-xs font-semibold ${
-                    driver.status === 'available' ? 'text-green-400' : 'text-yellow-400'
-                  }`}>
-                    {driver.status === 'available' ? 'Disponibil' : 'Ocupat'}
-                  </p>
-                </div>
-              ))}
-            </div>
-          </div>
 
           {/* Map Legend */}
           <div className="absolute top-4 right-4 bg-gray-900 bg-opacity-90 rounded-lg p-3 text-xs text-white border border-gray-700">
