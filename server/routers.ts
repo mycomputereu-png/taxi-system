@@ -244,7 +244,7 @@ export const appRouter = router({
         const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
         await createOtp(input.phone, code, expiresAt);
         console.log(`[OTP] Phone: ${input.phone}, Code: ${code}`);
-        return { success: true, code };
+        return { success: true };
       }),
 
     verifyOtp: publicProcedure
@@ -348,29 +348,6 @@ export const appRouter = router({
         if (!client) throw new TRPCError({ code: "UNAUTHORIZED" });
         const ride = await getClientActiveRide(client.id);
         return ride ?? null;
-      }),
-
-    calculateETA: publicProcedure
-      .input(
-        z.object({
-          token: z.string(),
-          driverLat: z.number(),
-          driverLng: z.number(),
-          clientLat: z.number(),
-          clientLng: z.number(),
-        })
-      )
-      .query(async ({ input }) => {
-        const client = await getClientByToken(input.token);
-        if (!client) throw new TRPCError({ code: "UNAUTHORIZED" });
-        const { calculateETA } = await import("./db");
-        const eta = await calculateETA(
-          input.driverLat,
-          input.driverLng,
-          input.clientLat,
-          input.clientLng
-        );
-        return eta;
       }),
 
     cancelRide: publicProcedure
@@ -583,24 +560,13 @@ export const appRouter = router({
       }),
 
     getActivePanicAlerts: protectedProcedure.query(async () => {
-      try {
-        return await getActivePanicAlerts();
-      } catch (error) {
-        console.error("[Dispatcher] Error fetching panic alerts:", error);
-        // Return empty array if table doesn't exist or query fails
-        return [];
-      }
+      return getActivePanicAlerts();
     }),
 
     getPanicAlertsByDriver: protectedProcedure
       .input(z.object({ driverId: z.number() }))
       .query(async ({ input }) => {
-        try {
-          return await getPanicAlertsByDriver(input.driverId);
-        } catch (error) {
-          console.error("[Dispatcher] Error fetching driver panic alerts:", error);
-          return [];
-        }
+        return getPanicAlertsByDriver(input.driverId);
       }),
   }),
 });

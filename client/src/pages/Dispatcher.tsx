@@ -140,12 +140,10 @@ export default function Dispatcher() {
     }
 
     const unsubDriverLoc = on("driver:location", (data: { driverId: number; lat: number; lng: number }) => {
-      console.log("[Dispatcher] driver:location event received:", data);
       setDriverLocations((prev) => {
         const next = new Map(prev);
         const existing = next.get(data.driverId);
         next.set(data.driverId, { ...(existing || { id: data.driverId, name: "", status: "available" }), lat: data.lat, lng: data.lng });
-        console.log("[Dispatcher] Updated driver locations:", next);
         return next;
       });
     });
@@ -181,19 +179,7 @@ export default function Dispatcher() {
       setClientLocations((prev) => {
         const next = new Map(prev);
         const existing = next.get(data.clientId);
-        if (existing) {
-          next.set(data.clientId, { ...existing, lat: data.lat, lng: data.lng });
-        } else {
-          // Create new entry if client not yet in map
-          next.set(data.clientId, {
-            id: data.clientId,
-            rideId: 0,
-            phone: "Unknown",
-            name: undefined,
-            lat: data.lat,
-            lng: data.lng,
-          });
-        }
+        if (existing) next.set(data.clientId, { ...existing, lat: data.lat, lng: data.lng });
         return next;
       });
     });
@@ -235,12 +221,12 @@ export default function Dispatcher() {
     setClientLocations((prev) => {
       const next = new Map(prev);
       for (const r of activeRidesQuery.data) {
-        if (r.clientLat && r.clientLng) {
+        if (r.clientLat && r.clientLng && r.client) {
           next.set(r.clientId, {
             id: r.clientId,
             rideId: r.id,
-            phone: "Unknown",
-            name: undefined,
+            phone: r.client.phone,
+            name: r.client.name ?? undefined,
             lat: parseFloat(String(r.clientLat)),
             lng: parseFloat(String(r.clientLng)),
           });
@@ -250,34 +236,12 @@ export default function Dispatcher() {
     });
   }, [activeRidesQuery.data]);
 
-  // Update client locations with client data from clientsQuery
-  useEffect(() => {
-    if (!clientsQuery.data) return;
-    setClientLocations((prev) => {
-      const next = new Map(prev);
-      for (const item of clientsQuery.data) {
-        const client = item.client;
-        const existing = next.get(client.id);
-        if (existing) {
-          next.set(client.id, {
-            ...existing,
-            phone: client.phone,
-            name: client.name ?? undefined,
-          });
-        }
-      }
-      return next;
-    });
-  }, [clientsQuery.data]);
-
   // Update map markers
   useEffect(() => {
-    console.log("[Dispatcher] Map marker update effect triggered, mapReady:", mapReady, "driverLocations:", driverLocations.size);
     if (!mapReady || !mapRef.current) return;
 
     // Driver markers (green with arrow)
     driverLocations.forEach((d) => {
-      console.log("[Dispatcher] Rendering driver marker for driver", d.id, "at", d.lat, d.lng);
       let marker = driverMarkersRef.current.get(d.id);
       if (!marker) {
         marker = new google.maps.Marker({
@@ -322,7 +286,9 @@ export default function Dispatcher() {
     });
 
     // Client markers (red circle)
+    console.log("[Dispatcher] Rendering client markers, count:", clientLocations.size);
     clientLocations.forEach((c) => {
+      console.log("[Dispatcher] Processing client marker:", c);
       let marker = clientMarkersRef.current.get(c.id);
       if (!marker) {
         marker = new google.maps.Marker({
@@ -376,13 +342,11 @@ export default function Dispatcher() {
   }, []);
 
   const handleMapReady = useCallback((map: google.maps.Map) => {
-    console.log("[Dispatcher] Map ready callback triggered");
     mapRef.current = map;
     setMapReady(true);
     // Set initial view to Bucharest
     map.setCenter({ lat: 44.4268, lng: 26.1025 });
     map.setZoom(13);
-    console.log("[Dispatcher] Map initialized and centered");
     // Add map styles for better visibility
     map.setOptions({
       styles: [
@@ -580,8 +544,8 @@ export default function Dispatcher() {
                       <CardContent className="p-3">
                         <div className="flex items-start justify-between">
                           <div>
-                            <p className="font-semibold text-white text-sm">Client #{ride.clientId}</p>
-                            <p className="text-gray-400 text-xs">ID: {ride.clientId}</p>
+                            <p className="font-semibold text-white text-sm">{ride.client?.name || ride.client?.phone}</p>
+                            <p className="text-gray-400 text-xs">{ride.client?.phone}</p>
                             {ride.clientAddress && <p className="text-gray-400 text-xs mt-1">{ride.clientAddress}</p>}
                             <p className="text-gray-500 text-xs mt-1">
                               {new Date(ride.createdAt).toLocaleTimeString("ro-RO")}
@@ -629,9 +593,9 @@ export default function Dispatcher() {
                       <CardContent className="p-3">
                         <div className="flex items-start justify-between">
                           <div>
-                            <p className="font-semibold text-white text-sm">Client #{ride.clientId}</p>
+                            <p className="font-semibold text-white text-sm">{ride.client?.name || ride.client?.phone}</p>
                             <p className="text-gray-400 text-xs">
-                              Șofer: {ride.driverId ? `#${ride.driverId}` : "—"}
+                              Șofer: {ride.driver?.name || "—"}
                             </p>
                             <Badge
                               className={`text-xs mt-1 ${
@@ -867,8 +831,8 @@ export default function Dispatcher() {
                   <CardContent className="p-3">
                     <div className="flex items-start justify-between">
                       <div>
-                        <p className="text-white text-sm font-medium">#{ride.id} - Client #{ride.clientId}</p>
-                        <p className="text-gray-400 text-xs">Șofer: {ride.driverId ? `#${ride.driverId}` : "—"}</p>
+                        <p className="text-white text-sm font-medium">#{ride.id} - {ride.client?.name || ride.client?.phone}</p>
+                        <p className="text-gray-400 text-xs">Șofer: {ride.driver?.name || "—"}</p>
                         <p className="text-gray-500 text-xs">{new Date(ride.createdAt).toLocaleString("ro-RO")}</p>
                       </div>
                       <Badge
@@ -889,27 +853,8 @@ export default function Dispatcher() {
         </div>
 
         {/* Map */}
-        <div className="flex-1 relative flex flex-col">
-          <MapView onMapReady={handleMapReady} className="flex-1 w-full" />
-
-          {/* Driver Info Panel */}
-          <div className="bg-gray-900 border-t border-gray-800 p-3 max-h-32 overflow-y-auto">
-            <h3 className="text-xs font-semibold text-gray-300 mb-2">Soferi Online ({driverLocations.size})</h3>
-            <div className="flex gap-2 overflow-x-auto">
-              {Array.from(driverLocations.values()).map((driver) => (
-                <div key={driver.id} className="flex-shrink-0 bg-gray-800 border border-gray-700 rounded p-2 min-w-max">
-                  <p className="text-xs font-medium text-white">{driver.name || `Sofer #${driver.id}`}</p>
-                  <p className="text-xs text-gray-400">Lat: {driver.lat.toFixed(4)}</p>
-                  <p className="text-xs text-gray-400">Lng: {driver.lng.toFixed(4)}</p>
-                  <p className={`text-xs font-semibold ${
-                    driver.status === 'available' ? 'text-green-400' : 'text-yellow-400'
-                  }`}>
-                    {driver.status === 'available' ? 'Disponibil' : 'Ocupat'}
-                  </p>
-                </div>
-              ))}
-            </div>
-          </div>
+        <div className="flex-1 relative">
+          <MapView onMapReady={handleMapReady} className="w-full h-full" />
 
           {/* Map Legend */}
           <div className="absolute top-4 right-4 bg-gray-900 bg-opacity-90 rounded-lg p-3 text-xs text-white border border-gray-700">

@@ -53,10 +53,8 @@ export function initSocketIO(httpServer: HttpServer) {
 
     socket.on("auth:client", async (data: { token: string }) => {
       try {
-        console.log(`[Socket.IO] auth:client received for socket ${socket.id}`);
         const client = await getClientByToken(data.token);
         if (!client) {
-          console.log(`[Socket.IO] auth:client failed: client not found`);
           socket.emit("auth:error", { message: "Invalid token" });
           return;
         }
@@ -67,7 +65,6 @@ export function initSocketIO(httpServer: HttpServer) {
         socket.emit("auth:success", { role: "client", clientId: client.id });
         console.log(`[Socket.IO] Client ${client.id} connected: ${socket.id}`);
       } catch (err) {
-        console.log(`[Socket.IO] auth:client error:`, err);
         socket.emit("auth:error", { message: "Auth failed" });
       }
     });
@@ -96,11 +93,7 @@ export function initSocketIO(httpServer: HttpServer) {
 
     socket.on("location:client", async (data: { lat: number; lng: number }) => {
       const clientId = (socket as any).clientId;
-      if (!clientId) {
-        console.log(`[Socket.IO] location:client received but clientId not set for socket ${socket.id}`);
-        return;
-      }
-      console.log(`[Socket.IO] Client ${clientId} location update: ${data.lat}, ${data.lng}`);
+      if (!clientId) return;
       await updateClientLocation(clientId, String(data.lat), String(data.lng));
       // Broadcast to dispatchers
       io?.to("dispatchers").emit("client:location", {

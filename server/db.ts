@@ -1,5 +1,5 @@
+import { and, desc, eq, ne } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
-import { eq, and, ne, desc } from "drizzle-orm";
 import {
   Client,
   Driver,
@@ -288,20 +288,14 @@ export async function createClientSession(clientId: number, token: string, expir
 
 export async function getClientByToken(token: string): Promise<Client | undefined> {
   const db = await getDb();
-  if (!db) {
-    console.log("[getClientByToken] Database not available");
-    return undefined;
-  }
-  console.log("[getClientByToken] Looking up token:", token.substring(0, 10) + "...");
+  if (!db) return undefined;
   const result = await db
     .select({ client: clients })
     .from(clientSessions)
     .innerJoin(clients, eq(clientSessions.clientId, clients.id))
     .where(eq(clientSessions.token, token))
     .limit(1);
-  const client = result[0]?.client;
-  console.log("[getClientByToken] Found client:", client?.id, "Phone:", client?.phone);
-  return client;
+  return result[0]?.client;
 }
 
 export async function deleteClientSession(token: string): Promise<void> {
@@ -574,61 +568,4 @@ export async function updatePanicAlertStatus(
     updates.resolvedAt = new Date();
   }
   await db.update(panicAlerts).set(updates).where(eq(panicAlerts.id, alertId));
-}
-
-
-// ─── ETA Calculation ───────────────────────────────────────────────
-
-export interface ETAData {
-  durationSeconds: number;
-  distanceMeters: number;
-  durationMinutes: number;
-  durationText: string;
-}
-
-export async function calculateETA(
-  driverLat: number,
-  driverLng: number,
-  clientLat: number,
-  clientLng: number
-): Promise<ETAData | null> {
-  try {
-    // Use Google Maps Directions API via the Manus proxy
-    const response = await fetch(
-      `https://maps.googleapis.com/maps/api/directions/json?origin=${driverLat},${driverLng}&destination=${clientLat},${clientLng}&mode=driving`,
-      {
-        headers: {
-          "Authorization": `Bearer ${ENV.forgeApiKey}`,
-        },
-      }
-    );
-
-    if (!response.ok) {
-      console.warn("[ETA] Directions API error:", response.status);
-      return null;
-    }
-
-    const data = await response.json();
-    if (data.routes && data.routes.length > 0) {
-      const route = data.routes[0];
-      if (route.legs && route.legs.length > 0) {
-        const leg = route.legs[0];
-        const durationSeconds = leg.duration.value;
-        const distanceMeters = leg.distance.value;
-        const durationMinutes = Math.ceil(durationSeconds / 60);
-
-        return {
-          durationSeconds,
-          distanceMeters,
-          durationMinutes,
-          durationText: leg.duration.text,
-        };
-      }
-    }
-
-    return null;
-  } catch (error) {
-    console.warn("[ETA] Error calculating ETA:", error);
-    return null;
-  }
 }
