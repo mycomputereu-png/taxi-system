@@ -182,3 +182,13 @@
 - [x] Added clientPhone and clientName to event payload
 - [x] Verified client auth:client is emitted after OTP verification
 - [x] Test end-to-end: client request -> dispatcher receives location -> marker appears
+
+
+## ✨ FEATURE: Real-time driver tracking with countdown on client app
+- [x] Verify driver:location:update events are being sent to client
+- [x] Implement countdown timer that updates every second
+- [x] Display driver marker on map with real-time position updates (already implemented)
+- [x] Show route polyline from driver to client (already implemented)
+- [x] Display ETA in minutes and update as driver moves
+- [x] Add visual indicator showing driver is approaching ("Sosind..." when ETA = 0)
+- [x] Test end-to-end: assign driver -> client sees location -> countdown updates

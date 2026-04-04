@@ -52,6 +52,7 @@ export default function ClientApp() {
   const [rideId, setRideId] = useState<number | null>(null);
   const [driverInfo, setDriverInfo] = useState<any>(null);
   const [estimatedArrival, setEstimatedArrival] = useState<number | null>(null);
+  const [countdownETA, setCountdownETA] = useState<number | null>(null);
 
   // Profile state
   const [showProfile, setShowProfile] = useState(false);
@@ -180,6 +181,7 @@ export default function ClientApp() {
         if (status === "OK" && result?.rows[0]?.elements[0]?.duration) {
           const minutes = Math.ceil(result.rows[0].elements[0].duration.value / 60);
           setEstimatedArrival(minutes);
+          setCountdownETA(minutes);
         }
       }
     );
@@ -226,12 +228,27 @@ export default function ClientApp() {
 
   // Socket.IO auth is now emitted in verifyOtpMut.onSuccess
 
+  // Countdown timer for ETA
+  useEffect(() => {
+    if (rideStatus !== "accepted" && rideStatus !== "in_progress") return;
+    if (countdownETA === null || countdownETA <= 0) return;
+
+    const timer = setInterval(() => {
+      setCountdownETA((prev) => {
+        if (prev === null || prev <= 0) return prev;
+        return prev - 1;
+      });
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, [rideStatus, countdownETA]);
+
   // Socket.IO event listeners
   useEffect(() => {
     on("ride:assigned", (data: any) => {
       setRideStatus("assigned");
       setDriverInfo(data.driver);
-      toast.success(`Șofer asignat: ${data.driver?.name || "Șofer"}!`);
+      toast.success(`Sofer asignat: ${data.driver?.name || "Sofer"}!`);
     });
   }, [on]);
 
@@ -511,10 +528,12 @@ export default function ClientApp() {
             <span className="text-white text-sm font-medium">Șofer asignat, în așteptare acceptare...</span>
           </div>
         )}
-        {rideStatus === "accepted" && estimatedArrival && (
+        {rideStatus === "accepted" && countdownETA !== null && (
           <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-green-900 bg-opacity-95 rounded-xl px-4 py-3 flex items-center gap-2 shadow-lg">
             <Clock className="w-4 h-4 text-green-300" />
-            <span className="text-white text-sm font-medium">Șoferul vine în ~{estimatedArrival} min</span>
+            <span className="text-white text-sm font-medium">
+              Soferul vine in {countdownETA > 0 ? `~${countdownETA} min` : "Sosind..."}
+            </span>
           </div>
         )}
         {rideStatus === "completed" && (
@@ -603,12 +622,14 @@ export default function ClientApp() {
               {driverInfo?.name?.[0] || "S"}
             </div>
             <div className="flex-1">
-              <p className="text-white font-semibold">{driverInfo?.name || "Șoferul tău"}</p>
+              <p className="text-white font-semibold">{driverInfo?.name || "Soferul tau"}</p>
               {driverInfo?.phone && <p className="text-gray-400 text-sm">{driverInfo.phone}</p>}
-              {estimatedArrival && (
+              {countdownETA !== null && (
                 <div className="flex items-center gap-1 mt-1">
                   <Clock className="w-3 h-3 text-green-400" />
-                  <span className="text-green-400 text-sm font-medium">~{estimatedArrival} min</span>
+                  <span className="text-green-400 text-sm font-medium">
+                    {countdownETA > 0 ? `~${countdownETA} min` : "Sosind..."}
+                  </span>
                 </div>
               )}
             </div>
