@@ -77,14 +77,25 @@ export default function ClientApp() {
 
   const verifyOtpMut = trpc.clientApp.verifyOtp.useMutation({
     onSuccess: (data) => {
+      console.log("[ClientApp] verifyOtp onSuccess called with data:", data);
       const s: ClientSession = { token: data.token, clientId: data.client.id, phone: data.client.phone };
+      console.log("[ClientApp] Created session object:", s);
       saveSession(s);
       setSession(s);
       // Emit Socket.IO auth after session is saved
+      console.log("[ClientApp] Emitting auth:client with token:", s.token);
       emit("auth:client", { token: s.token });
+      // Fallback: emit again after a short delay to ensure socket is connected
+      setTimeout(() => {
+        console.log("[ClientApp] Fallback: emitting auth:client again");
+        emit("auth:client", { token: s.token });
+      }, 500);
       toast.success("Autentificat cu succes!");
     },
-    onError: (e) => toast.error(e.message),
+    onError: (e) => {
+      console.log("[ClientApp] verifyOtp onError:", e);
+      toast.error(e.message);
+    },
   });
 
   const requestRideMut = trpc.clientApp.requestRide.useMutation({
@@ -224,7 +235,24 @@ export default function ClientApp() {
     }
   }, [activeRideQuery.data]);
 
-  // Socket.IO auth is now emitted in verifyOtpMut.onSuccess
+  // Socket.IO auth: emit when component mounts with existing session
+  useEffect(() => {
+    if (!session) return;
+    emit("auth:client", { token: session.token });
+    // Fallback: emit again after a short delay to ensure socket is connected
+    setTimeout(() => {
+      emit("auth:client", { token: session.token });
+    }, 500);
+  }, [session, emit]);
+
+  // Re-emit auth:client on reconnect
+  useEffect(() => {
+    if (!session) return;
+    const handleReconnect = () => {
+      emit("auth:client", { token: session.token });
+    };
+    on("connect", handleReconnect);
+  }, [session, emit, on]);
 
   // Socket.IO event listeners
   useEffect(() => {

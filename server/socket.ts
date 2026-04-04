@@ -53,8 +53,10 @@ export function initSocketIO(httpServer: HttpServer) {
 
     socket.on("auth:client", async (data: { token: string }) => {
       try {
+        console.log(`[Socket.IO] auth:client received for socket ${socket.id}`);
         const client = await getClientByToken(data.token);
         if (!client) {
+          console.log(`[Socket.IO] auth:client failed: client not found`);
           socket.emit("auth:error", { message: "Invalid token" });
           return;
         }
@@ -65,6 +67,7 @@ export function initSocketIO(httpServer: HttpServer) {
         socket.emit("auth:success", { role: "client", clientId: client.id });
         console.log(`[Socket.IO] Client ${client.id} connected: ${socket.id}`);
       } catch (err) {
+        console.log(`[Socket.IO] auth:client error:`, err);
         socket.emit("auth:error", { message: "Auth failed" });
       }
     });

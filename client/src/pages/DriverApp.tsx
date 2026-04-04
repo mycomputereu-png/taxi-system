@@ -182,8 +182,8 @@ export default function DriverApp() {
       setPendingRide({
         rideId: ride.id,
         clientId: ride.clientId,
-        clientPhone: ride.client?.phone,
-        clientName: ride.client?.name ?? undefined,
+        clientPhone: "Unknown",
+        clientName: undefined,
         lat: parseFloat(String(ride.clientLat)),
         lng: parseFloat(String(ride.clientLng)),
         address: ride.clientAddress ?? undefined,

@@ -165,3 +165,9 @@
 ## BUG: Driver Rating Submission Fails
 - [x] Fix clientId undefined when submitting rating from driver app - FIXED: added driver.getActiveRide procedure
 - [x] Ensure activeRide has clientId before submitting rating - Now using driver-specific query
+
+
+## BUG: Client Location Not Appearing on Dispatcher
+- [ ] Fix Socket.IO auth:client not emitted when client requests ride
+- [ ] Ensure location:client events reach dispatcher
+- [ ] Test client location display on dispatcher map

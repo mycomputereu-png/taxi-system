@@ -1,5 +1,5 @@
-import { and, desc, eq, ne } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
+import { eq, and, ne, desc } from "drizzle-orm";
 import {
   Client,
   Driver,
@@ -288,14 +288,20 @@ export async function createClientSession(clientId: number, token: string, expir
 
 export async function getClientByToken(token: string): Promise<Client | undefined> {
   const db = await getDb();
-  if (!db) return undefined;
+  if (!db) {
+    console.log("[getClientByToken] Database not available");
+    return undefined;
+  }
+  console.log("[getClientByToken] Looking up token:", token.substring(0, 10) + "...");
   const result = await db
     .select({ client: clients })
     .from(clientSessions)
     .innerJoin(clients, eq(clientSessions.clientId, clients.id))
     .where(eq(clientSessions.token, token))
     .limit(1);
-  return result[0]?.client;
+  const client = result[0]?.client;
+  console.log("[getClientByToken] Found client:", client?.id, "Phone:", client?.phone);
+  return client;
 }
 
 export async function deleteClientSession(token: string): Promise<void> {

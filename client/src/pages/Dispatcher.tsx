@@ -181,7 +181,19 @@ export default function Dispatcher() {
       setClientLocations((prev) => {
         const next = new Map(prev);
         const existing = next.get(data.clientId);
-        if (existing) next.set(data.clientId, { ...existing, lat: data.lat, lng: data.lng });
+        if (existing) {
+          next.set(data.clientId, { ...existing, lat: data.lat, lng: data.lng });
+        } else {
+          // Create new entry if client not yet in map
+          next.set(data.clientId, {
+            id: data.clientId,
+            rideId: 0,
+            phone: "Unknown",
+            name: undefined,
+            lat: data.lat,
+            lng: data.lng,
+          });
+        }
         return next;
       });
     });
@@ -223,12 +235,12 @@ export default function Dispatcher() {
     setClientLocations((prev) => {
       const next = new Map(prev);
       for (const r of activeRidesQuery.data) {
-        if (r.clientLat && r.clientLng && r.client) {
+        if (r.clientLat && r.clientLng) {
           next.set(r.clientId, {
             id: r.clientId,
             rideId: r.id,
-            phone: r.client.phone,
-            name: r.client.name ?? undefined,
+            phone: "Unknown",
+            name: undefined,
             lat: parseFloat(String(r.clientLat)),
             lng: parseFloat(String(r.clientLng)),
           });
@@ -237,6 +249,26 @@ export default function Dispatcher() {
       return next;
     });
   }, [activeRidesQuery.data]);
+
+  // Update client locations with client data from clientsQuery
+  useEffect(() => {
+    if (!clientsQuery.data) return;
+    setClientLocations((prev) => {
+      const next = new Map(prev);
+      for (const item of clientsQuery.data) {
+        const client = item.client;
+        const existing = next.get(client.id);
+        if (existing) {
+          next.set(client.id, {
+            ...existing,
+            phone: client.phone,
+            name: client.name ?? undefined,
+          });
+        }
+      }
+      return next;
+    });
+  }, [clientsQuery.data]);
 
   // Update map markers
   useEffect(() => {
@@ -290,9 +322,7 @@ export default function Dispatcher() {
     });
 
     // Client markers (red circle)
-    console.log("[Dispatcher] Rendering client markers, count:", clientLocations.size);
     clientLocations.forEach((c) => {
-      console.log("[Dispatcher] Processing client marker:", c);
       let marker = clientMarkersRef.current.get(c.id);
       if (!marker) {
         marker = new google.maps.Marker({
@@ -550,8 +580,8 @@ export default function Dispatcher() {
                       <CardContent className="p-3">
                         <div className="flex items-start justify-between">
                           <div>
-                            <p className="font-semibold text-white text-sm">{ride.client?.name || ride.client?.phone}</p>
-                            <p className="text-gray-400 text-xs">{ride.client?.phone}</p>
+                            <p className="font-semibold text-white text-sm">Client #{ride.clientId}</p>
+                            <p className="text-gray-400 text-xs">ID: {ride.clientId}</p>
                             {ride.clientAddress && <p className="text-gray-400 text-xs mt-1">{ride.clientAddress}</p>}
                             <p className="text-gray-500 text-xs mt-1">
                               {new Date(ride.createdAt).toLocaleTimeString("ro-RO")}
@@ -599,9 +629,9 @@ export default function Dispatcher() {
                       <CardContent className="p-3">
                         <div className="flex items-start justify-between">
                           <div>
-                            <p className="font-semibold text-white text-sm">{ride.client?.name || ride.client?.phone}</p>
+                            <p className="font-semibold text-white text-sm">Client #{ride.clientId}</p>
                             <p className="text-gray-400 text-xs">
-                              Șofer: {ride.driver?.name || "—"}
+                              Șofer: {ride.driverId ? `#${ride.driverId}` : "—"}
                             </p>
                             <Badge
                               className={`text-xs mt-1 ${
@@ -837,8 +867,8 @@ export default function Dispatcher() {
                   <CardContent className="p-3">
                     <div className="flex items-start justify-between">
                       <div>
-                        <p className="text-white text-sm font-medium">#{ride.id} - {ride.client?.name || ride.client?.phone}</p>
-                        <p className="text-gray-400 text-xs">Șofer: {ride.driver?.name || "—"}</p>
+                        <p className="text-white text-sm font-medium">#{ride.id} - Client #{ride.clientId}</p>
+                        <p className="text-gray-400 text-xs">Șofer: {ride.driverId ? `#${ride.driverId}` : "—"}</p>
                         <p className="text-gray-500 text-xs">{new Date(ride.createdAt).toLocaleString("ro-RO")}</p>
                       </div>
                       <Badge
