@@ -249,8 +249,12 @@ export default function ClientApp() {
       setRideStatus("assigned");
       setDriverInfo(data.driver);
       toast.success(`Sofer asignat: ${data.driver?.name || "Sofer"}!`);
+      // Start tracking driver location immediately when assigned
+      if (data.driver?.id) {
+        emit("track:driver", { driverId: data.driver.id });
+      }
     });
-  }, [on]);
+  }, [on, emit]);
 
   useEffect(() => {
     on("ride:accepted", (data: any) => {

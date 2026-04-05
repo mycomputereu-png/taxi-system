@@ -218,3 +218,12 @@
 - [x] Phone call initiates automatically when ride is requested
 - [x] Ride request is sent to backend simultaneously
 - [x] Verified: tel: protocol triggers native phone dialer on mobile devices
+
+
+## 🐛 BUG: Client doesn't see driver route and countdown after driver assignment
+- [x] Identified: ride:assigned handler was not emitting track:driver
+- [x] Added emit("track:driver") to ride:assigned handler
+- [x] Driver location updates now received immediately after assignment
+- [x] Route polyline draws on client map from driver to client
+- [x] Countdown timer updates in real-time
+- [x] Test: Assign driver -> client receives driver location -> route appears -> countdown starts
