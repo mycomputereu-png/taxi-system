@@ -57,6 +57,12 @@ export default function ClientApp() {
   // Profile state
   const [showProfile, setShowProfile] = useState(false);
 
+  // Driver arrival notification state
+  const [showArrivalAlert, setShowArrivalAlert] = useState(false);
+  const [driverArrived, setDriverArrived] = useState(false);
+  const arrivalNotificationRef = useRef<boolean>(false);
+  const [driverPos, setDriverPos] = useState<{ lat: number; lng: number } | null>(null);
+
   // Map state
   const [mapReady, setMapReady] = useState(false);
   const mapRef = useRef<google.maps.Map | null>(null);
@@ -120,6 +126,44 @@ export default function ClientApp() {
     clientMarkerRef.current.setPosition({ lat, lng });
     mapRef.current.panTo({ lat, lng });
   }, []);
+
+  // Calculate distance between two coordinates (in meters)
+  const calculateDistance = (lat1: number, lng1: number, lat2: number, lng2: number): number => {
+    const R = 6371000; // Earth radius in meters
+    const dLat = ((lat2 - lat1) * Math.PI) / 180;
+    const dLng = ((lng2 - lng1) * Math.PI) / 180;
+    const a =
+      Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+      Math.cos((lat1 * Math.PI) / 180) *
+        Math.cos((lat2 * Math.PI) / 180) *
+        Math.sin(dLng / 2) *
+        Math.sin(dLng / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    return R * c;
+  };
+
+  // Play notification sound
+  const playNotificationSound = () => {
+    try {
+      const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+      const oscillator = audioContext.createOscillator();
+      const gainNode = audioContext.createGain();
+      
+      oscillator.connect(gainNode);
+      gainNode.connect(audioContext.destination);
+      
+      oscillator.frequency.value = 800;
+      oscillator.type = 'sine';
+      
+      gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
+      gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.5);
+      
+      oscillator.start(audioContext.currentTime);
+      oscillator.stop(audioContext.currentTime + 0.5);
+    } catch (e) {
+      console.error('Error playing notification sound:', e);
+    }
+  };
 
   const updateDriverMarker = useCallback((lat: number, lng: number) => {
     if (!mapRef.current) return;
@@ -186,6 +230,15 @@ export default function ClientApp() {
       }
     );
   }, [setEstimatedArrival, setCountdownETA]);
+
+  // Reset arrival notification when ride ends
+  useEffect(() => {
+    if (rideStatus === "completed" || rideStatus === "cancelled" || rideStatus === "rejected") {
+      arrivalNotificationRef.current = false;
+      setShowArrivalAlert(false);
+      setDriverArrived(false);
+    }
+  }, [rideStatus]);
 
   const clearDirections = useCallback(() => {
     if (directionsRendererRef.current) {
@@ -296,13 +349,24 @@ export default function ClientApp() {
 
   useEffect(() => {
     on("driver:location:update", (data: { driverId: number; lat: number; lng: number }) => {
+      setDriverPos({ lat: data.lat, lng: data.lng });
       updateDriverMarker(data.lat, data.lng);
       if (clientPos) {
         drawRoute({ lat: data.lat, lng: data.lng }, clientPos);
         calculateETA({ lat: data.lat, lng: data.lng }, clientPos);
+        
+        // Check if driver is within 50 meters of client
+        const distance = calculateDistance(data.lat, data.lng, clientPos.lat, clientPos.lng);
+        if (distance <= 50 && !arrivalNotificationRef.current && rideStatus === "accepted") {
+          arrivalNotificationRef.current = true;
+          setDriverArrived(true);
+          setShowArrivalAlert(true);
+          playNotificationSound();
+          toast.success("Șoferul a sosit! Ieșiți din casă.");
+        }
       }
     });
-  }, [on, clientPos, updateDriverMarker, drawRoute, calculateETA]);
+  }, [on, clientPos, updateDriverMarker, drawRoute, calculateETA, rideStatus]);
 
   // GPS tracking
   useEffect(() => {
@@ -650,6 +714,36 @@ export default function ClientApp() {
           </div>
         ) : null}
       </div>
+      
+      {/* Driver Arrival Alert Modal */}
+      {showArrivalAlert && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <Card className="bg-gradient-to-br from-green-900 to-green-800 border-green-600 w-96 shadow-2xl">
+            <CardHeader className="text-center">
+              <CardTitle className="text-white text-2xl flex items-center justify-center gap-2">
+                <CheckCircle className="w-8 h-8 text-green-400" />
+                Soferul a sosit!
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="bg-green-900 bg-opacity-50 p-4 rounded-lg">
+                <p className="text-white font-semibold text-lg">{driverInfo?.name}</p>
+                <p className="text-green-300 text-sm">Masina: {driverInfo?.carPlate}</p>
+                <p className="text-green-300 text-sm">{driverInfo?.carBrand}</p>
+              </div>
+              <div className="text-center">
+                <p className="text-gray-200 mb-3">Iesiti din casa si asteptati pe trotuar.</p>
+                <Button
+                  onClick={() => setShowArrivalAlert(false)}
+                  className="bg-green-600 hover:bg-green-700 text-white w-full"
+                >
+                  Am iesit din casa
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
     </div>
   );
 }

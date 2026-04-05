@@ -236,3 +236,13 @@
 - [x] Route now updates dynamically as driver location changes
 - [x] Countdown updates in real-time after driver accepts
 - [x] Test: Driver accepts -> route appears on map -> countdown starts
+
+
+## 🔔 FEATURE: Driver arrival notification with sound and visual alert
+- [x] Calculate distance between driver and client using Haversine formula
+- [x] Detect when driver is within 50 meters of client location
+- [x] Play notification sound (800Hz sine wave) when driver arrives
+- [x] Display visual alert modal with driver info (name, car plate, brand)
+- [x] Add dismiss button ("Am iesit din casa")
+- [x] Reset notification state when ride ends
+- [x] Test: Driver approaches -> notification triggers at 50m -> sound plays + alert shows
