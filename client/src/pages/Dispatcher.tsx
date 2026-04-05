@@ -11,6 +11,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
 import { getLoginUrl } from "@/const";
 import { useSocket, getSocket } from "@/hooks/useSocket";
+import { DriverDetailsModal } from "@/components/DriverDetailsModal";
 import {
   MapPin, Users, Car, Clock, Plus, Trash2, LogOut, CheckCircle, XCircle, Navigation, Star, Phone, ArrowLeft
 } from "lucide-react";
@@ -54,6 +55,8 @@ export default function Dispatcher() {
   const [ridesSortBy, setRidesSortBy] = useState<"newest" | "oldest" | "completed" | "cancelled">("newest");
   const [selectedPanicAlertId, setSelectedPanicAlertId] = useState<number | null>(null);
   const [panicResponseNote, setPanicResponseNote] = useState("");
+  const [selectedDriver, setSelectedDriver] = useState<any | null>(null);
+  const [driverDetailsOpen, setDriverDetailsOpen] = useState(false);
 
   // tRPC queries
   const utils = trpc.useUtils();
@@ -718,7 +721,14 @@ export default function Dispatcher() {
               </div>
 
               {driversQuery.data?.map((driver) => (
-                <Card key={driver.id} className="mb-2 bg-gray-800 border-gray-700">
+                <Card
+                  key={driver.id}
+                  className="mb-2 bg-gray-800 border-gray-700 cursor-pointer hover:bg-gray-750 transition-colors"
+                  onClick={() => {
+                    setSelectedDriver(driver);
+                    setDriverDetailsOpen(true);
+                  }}
+                >
                   <CardContent className="p-3">
                     <div className="flex items-center justify-between">
                       <div>
@@ -742,7 +752,10 @@ export default function Dispatcher() {
                           size="sm"
                           variant="ghost"
                           className="text-red-400 hover:text-red-300 hover:bg-red-900 p-1"
-                          onClick={() => deleteDriverMut.mutate({ driverId: driver.id })}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            deleteDriverMut.mutate({ driverId: driver.id });
+                          }}
                         >
                           <Trash2 className="w-3 h-3" />
                         </Button>
@@ -1110,6 +1123,15 @@ export default function Dispatcher() {
           </div>
         </DialogContent>
       </Dialog>
+      
+      {/* Driver Details Modal */}
+      {selectedDriver && (
+        <DriverDetailsModal
+          open={driverDetailsOpen}
+          onOpenChange={setDriverDetailsOpen}
+          driver={selectedDriver}
+        />
+      )}
     </div>
   );
 }

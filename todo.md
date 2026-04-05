@@ -285,6 +285,7 @@
 - [x] Build DriverDetailsModal component with ride history table
 - [x] Implement time period filtering (daily, weekly, monthly)
 - [x] Add statistics display (total rides, km, revenue, rating)
-- [ ] Add click handler on driver cards to open modal
+- [x] Add click handler on driver cards to open modal
+- [x] Integrate DriverDetailsModal into Dispatcher UI
 - [ ] Calculate distance from GPS coordinates using Haversine formula
 - [ ] Test: Click driver -> modal opens -> shows rides filtered by period
