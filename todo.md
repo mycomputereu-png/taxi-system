@@ -274,3 +274,17 @@
 - [x] Route polyline draws correctly from driver to client
 - [x] Countdown timer updates in real-time
 - [x] Test: Driver accepts -> route appears -> countdown starts
+
+
+## 📊 FEATURE: Driver statistics and ride history tracking
+- [x] Add distance_km column to rides table
+- [x] Add revenue column to rides table
+- [x] Create database migration for new columns
+- [x] Create backend procedure: dispatcher.getDriverRides (with date filtering)
+- [x] Create backend procedure: dispatcher.getDriverStatistics (total km, rides, revenue)
+- [x] Build DriverDetailsModal component with ride history table
+- [x] Implement time period filtering (daily, weekly, monthly)
+- [x] Add statistics display (total rides, km, revenue, rating)
+- [ ] Add click handler on driver cards to open modal
+- [ ] Calculate distance from GPS coordinates using Haversine formula
+- [ ] Test: Click driver -> modal opens -> shows rides filtered by period

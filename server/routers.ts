@@ -492,6 +492,28 @@ export const appRouter = router({
         if (!profile) throw new TRPCError({ code: "NOT_FOUND" });
         return profile;
       }),
+
+    getDriverRides: protectedProcedure
+      .input(z.object({
+        driverId: z.number(),
+        startDate: z.date().optional(),
+        endDate: z.date().optional(),
+      }))
+      .query(async ({ input }) => {
+        const { getDriverRides } = await import("./db");
+        return getDriverRides(input.driverId, input.startDate, input.endDate);
+      }),
+
+    getDriverStatistics: protectedProcedure
+      .input(z.object({
+        driverId: z.number(),
+        startDate: z.date().optional(),
+        endDate: z.date().optional(),
+      }))
+      .query(async ({ input }) => {
+        const { getDriverStatistics } = await import("./db");
+        return getDriverStatistics(input.driverId, input.startDate, input.endDate);
+      }),
   }),
 
   // ─── Panic Alerts ──────────────────────────────────────────────────────────

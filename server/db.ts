@@ -1,4 +1,4 @@
-import { eq, and, ne, desc, inArray, getTableColumns } from "drizzle-orm";
+import { eq, and, ne, desc, inArray, getTableColumns, gte, lte, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import {
   Client,
@@ -587,4 +587,130 @@ export async function updatePanicAlertStatus(
     updates.resolvedAt = new Date();
   }
   await db.update(panicAlerts).set(updates).where(eq(panicAlerts.id, alertId));
+}
+
+
+// Driver statistics and ride history
+export interface DriverRideStats {
+  id: number;
+  clientId: number;
+  driverId: number | null;
+  status: string;
+  clientLat: string | null;
+  clientLng: string | null;
+  clientAddress: string | null;
+  destinationLat: string | null;
+  destinationLng: string | null;
+  destinationAddress: string | null;
+  estimatedArrival: number | null;
+  distanceKm: string | null;
+  revenue: string | null;
+  createdAt: Date;
+  completedAt: Date | null;
+  acceptedAt: Date | null;
+  clientName: string | null;
+  clientPhone: string | null;
+}
+
+export async function getDriverRides(
+  driverId: number,
+  startDate?: Date,
+  endDate?: Date
+): Promise<DriverRideStats[]> {
+  const db = await getDb();
+  if (!db) return [];
+  
+  let query = db
+    .select({
+      id: rides.id,
+      clientId: rides.clientId,
+      driverId: rides.driverId,
+      status: rides.status,
+      clientLat: rides.clientLat,
+      clientLng: rides.clientLng,
+      clientAddress: rides.clientAddress,
+      destinationLat: rides.destinationLat,
+      destinationLng: rides.destinationLng,
+      destinationAddress: rides.destinationAddress,
+      estimatedArrival: rides.estimatedArrival,
+      distanceKm: rides.distanceKm,
+      revenue: rides.revenue,
+      createdAt: rides.createdAt,
+      completedAt: rides.completedAt,
+      acceptedAt: rides.acceptedAt,
+      clientName: clients.name,
+      clientPhone: clients.phone,
+    })
+    .from(rides)
+    .leftJoin(clients, eq(rides.clientId, clients.id));
+  
+  const whereConditions: any[] = [eq(rides.driverId, driverId)];
+  if (startDate) whereConditions.push(gte(rides.createdAt, startDate));
+  if (endDate) whereConditions.push(lte(rides.createdAt, endDate));
+  
+  return query.where(and(...whereConditions)).orderBy(desc(rides.createdAt));
+}
+
+export interface DriverStatistics {
+  totalRides: number;
+  completedRides: number;
+  totalDistanceKm: number;
+  totalRevenue: number;
+  averageRating: number | null;
+  ratingCount: number;
+}
+
+export async function getDriverStatistics(
+  driverId: number,
+  startDate?: Date,
+  endDate?: Date
+): Promise<DriverStatistics> {
+  const db = await getDb();
+  if (!db) {
+    return {
+      totalRides: 0,
+      completedRides: 0,
+      totalDistanceKm: 0,
+      totalRevenue: 0,
+      averageRating: null,
+      ratingCount: 0,
+    };
+  }
+  
+  // Get ride statistics
+  const conditions: any[] = [eq(rides.driverId, driverId)];
+  if (startDate) conditions.push(gte(rides.createdAt, startDate));
+  if (endDate) conditions.push(lte(rides.createdAt, endDate));
+  
+  const rideStats = await db
+    .select({
+      totalRides: sql<number>`COUNT(*)`,
+      completedRides: sql<number>`SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END)`,
+      totalDistanceKm: sql<number>`COALESCE(SUM(CAST(distanceKm AS DECIMAL(10,2))), 0)`,
+      totalRevenue: sql<number>`COALESCE(SUM(CAST(revenue AS DECIMAL(10,2))), 0)`,
+    })
+    .from(rides)
+    .where(and(...conditions));
+  
+  // Get rating statistics
+  const ratingConditions: any[] = [eq(clientRatings.driverId, driverId)];
+  if (startDate) ratingConditions.push(gte(clientRatings.createdAt, startDate));
+  if (endDate) ratingConditions.push(lte(clientRatings.createdAt, endDate));
+  
+  const ratingStats = await db
+    .select({
+      averageRating: sql<number>`AVG(rating)`,
+      ratingCount: sql<number>`COUNT(*)`,
+    })
+    .from(clientRatings)
+    .where(and(...ratingConditions));
+  
+  return {
+    totalRides: Number(rideStats[0]?.totalRides) || 0,
+    completedRides: Number(rideStats[0]?.completedRides) || 0,
+    totalDistanceKm: rideStats[0]?.totalDistanceKm ? parseFloat(String(rideStats[0].totalDistanceKm)) : 0,
+    totalRevenue: rideStats[0]?.totalRevenue ? parseFloat(String(rideStats[0].totalRevenue)) : 0,
+    averageRating: ratingStats[0]?.averageRating ? parseFloat(String(ratingStats[0].averageRating)) : null,
+    ratingCount: Number(ratingStats[0]?.ratingCount) || 0,
+  };
 }

@@ -50,6 +50,13 @@
       "when": 1775317753242,
       "tag": "0006_black_kree",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "5",
+      "when": 1775380142686,
+      "tag": "0007_peaceful_hydra",
+      "breakpoints": true
     }
   ]
 }
