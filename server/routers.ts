@@ -157,12 +157,15 @@ export const appRouter = router({
         clearRideAcceptanceTimeout(input.rideId);
 
         await updateRideStatus(input.rideId, "accepted", { acceptedAt: new Date() });
+        console.log(`[Ride] Driver ${driver.id} accepted ride ${input.rideId}`);
         emitToClient(ride.clientId, "ride:accepted", {
-          driverId: driver.id,
-          driverName: driver.name,
-          driverPhone: driver.phone,
-          lat: driver.currentLat,
-          lng: driver.currentLng,
+          driver: {
+            id: driver.id,
+            name: driver.name,
+            phone: driver.phone,
+            currentLat: driver.currentLat,
+            currentLng: driver.currentLng,
+          },
         });
         emitToDispatchers("ride:accepted", { rideId: ride.id, driverId: driver.id });
         return { success: true };

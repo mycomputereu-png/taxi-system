@@ -42,6 +42,14 @@ export default function ClientApp() {
     console.log("[ClientApp] Loaded session:", s);
     return s;
   });
+
+  // Emit auth:client when session is available
+  useEffect(() => {
+    if (session) {
+      console.log("[ClientApp] Session changed, emitting auth:client");
+      emit("auth:client", { token: session.token });
+    }
+  }, [session, emit]);
   const [phone, setPhone] = useState("");
   const [otp, setOtp] = useState("");
   const [otpSent, setOtpSent] = useState(false);
@@ -87,8 +95,7 @@ export default function ClientApp() {
       const s: ClientSession = { token: data.token, clientId: data.client.id, phone: data.client.phone };
       saveSession(s);
       setSession(s);
-      // Emit Socket.IO auth after session is saved
-      emit("auth:client", { token: s.token });
+      // auth:client will be emitted by useEffect when session changes
       toast.success("Autentificat cu succes!");
     },
     onError: (e) => toast.error(e.message),
@@ -267,11 +274,15 @@ export default function ClientApp() {
 
   useEffect(() => {
     on("ride:accepted", (data: any) => {
+      console.log("[ClientApp] ride:accepted received:", data);
       setRideStatus("accepted");
       setDriverInfo(data.driver);
       toast.success(`Șoferul ${data.driver?.name} a acceptat cursa!`);
       if (data.driver?.id) {
+        console.log("[ClientApp] Emitting track:driver for driverId:", data.driver.id);
         emit("track:driver", { driverId: data.driver.id });
+      } else {
+        console.log("[ClientApp] No driver.id in ride:accepted data");
       }
     });
   }, [on, emit]);
@@ -305,11 +316,27 @@ export default function ClientApp() {
 
   useEffect(() => {
     on("driver:location:update", (data: { driverId: number; lat: number; lng: number }) => {
+      console.log("[ClientApp] Driver location update:", data, "clientPos:", clientPos, "rideStatus:", rideStatus);
       setDriverPos({ lat: data.lat, lng: data.lng });
       updateDriverMarker(data.lat, data.lng);
       if (clientPos) {
+        // Initialize DirectionsRenderer if not already done
+        if (mapRef.current && !directionsRendererRef.current) {
+          console.log("Initializing DirectionsRenderer");
+          directionsRendererRef.current = new google.maps.DirectionsRenderer({
+            map: mapRef.current,
+            suppressMarkers: true,
+            polylineOptions: {
+              strokeColor: "#3b82f6",
+              strokeWeight: 5,
+              strokeOpacity: 0.8,
+            },
+          });
+        }
+        
         // Draw route using DirectionsService
         if (mapRef.current && directionsRendererRef.current) {
+          console.log("Drawing route from", data, "to", clientPos);
           const directionsService = new google.maps.DirectionsService();
           directionsService.route(
             {
@@ -318,6 +345,7 @@ export default function ClientApp() {
               travelMode: google.maps.TravelMode.DRIVING,
             },
             (result, status) => {
+              console.log("Route result:", status, result);
               if (status === "OK" && result && directionsRendererRef.current) {
                 directionsRendererRef.current.setDirections(result);
               }
@@ -334,8 +362,10 @@ export default function ClientApp() {
             travelMode: google.maps.TravelMode.DRIVING,
           },
           (result, status) => {
+            console.log("ETA result:", status, result);
             if (status === "OK" && result?.rows[0]?.elements[0]?.duration) {
               const minutes = Math.ceil(result.rows[0].elements[0].duration.value / 60);
+              console.log("Setting ETA:", minutes);
               setEstimatedArrival(minutes);
               setCountdownETA(minutes);
             }

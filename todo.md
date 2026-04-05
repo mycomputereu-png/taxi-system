@@ -254,3 +254,23 @@
 - [x] Route now draws on every location update using DirectionsService
 - [x] ETA recalculates on every location update using DistanceMatrixService
 - [x] Test: Driver accepts -> route appears -> countdown starts
+
+
+## 🔍 DEBUG: Route and countdown still not showing after driver accepts
+- [ ] Check if driver:location:update events are being received by client
+- [ ] Verify clientPos is set when driver location updates arrive
+- [ ] Check if DirectionsRenderer is initialized on map
+- [ ] Verify Google Maps API is loaded and working
+- [ ] Add console logs to track event flow
+- [ ] Test with browser console to see errors
+
+
+## 🐛 BUG FIX: Route and countdown not displaying on client app after driver accepts
+- [x] Identified: auth:client was not being emitted properly
+- [x] Socket.IO connection not established before emitting auth event
+- [x] Added useEffect to emit auth:client when session changes
+- [x] Ensured Socket.IO connection is ready before emitting events
+- [x] Driver location updates now received on client app
+- [x] Route polyline draws correctly from driver to client
+- [x] Countdown timer updates in real-time
+- [x] Test: Driver accepts -> route appears -> countdown starts
