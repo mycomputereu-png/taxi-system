@@ -100,7 +100,7 @@ export const rides = mysqlTable("rides", {
   completedAt: timestamp("completedAt"),
   assignedAt: timestamp("assignedAt"), // when ride was assigned to driver
   acceptanceTimeoutAt: timestamp("acceptanceTimeoutAt"), // when timeout expires (assignedAt + 30s)
-  distanceKm: decimal("distanceKm", { precision: 8, scale: 2 }), // distance in kilometers
+  distanceKm: decimal("distance_km", { precision: 8, scale: 2 }), // distance in kilometers
   revenue: decimal("revenue", { precision: 10, scale: 2 }), // ride revenue/fare
 });
 

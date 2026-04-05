@@ -89,10 +89,31 @@ async function runMigrations() {
       // Column might already exist, ignore error
     });
     
+    // Add distance_km column if it doesn't exist
+    await db.execute(
+      "ALTER TABLE `rides` ADD COLUMN `distance_km` DECIMAL(8, 2) NULL"
+    ).catch(() => {
+      // Column might already exist, ignore error
+    });
+    
+    // Add revenue column if it doesn't exist
+    await db.execute(
+      "ALTER TABLE `rides` ADD COLUMN `revenue` DECIMAL(10, 2) NULL"
+    ).catch(() => {
+      // Column might already exist, ignore error
+    });
+    
     await db.execute(
       "ALTER TABLE `rides` ADD COLUMN `acceptanceTimeoutAt` timestamp NULL"
     ).catch(() => {
       // Column might already exist, ignore error
+    });
+    
+    // Fix distanceKm column name to distance_km if it exists as distanceKm
+    await db.execute(
+      "ALTER TABLE `rides` CHANGE COLUMN `distanceKm` `distance_km` DECIMAL(8, 2) NULL"
+    ).catch(() => {
+      // Column might already be named distance_km, ignore error
     });
     
     console.log("[Database] Migrations completed");
@@ -238,11 +259,13 @@ export async function deleteDriverSession(token: string): Promise<void> {
 export async function upsertClient(phone: string, name?: string): Promise<Client> {
   const db = await getDb();
   if (!db) throw new Error("DB not available");
+  console.log(`[DB] upsertClient: phone=${phone}, name=${name}`);
   await db
     .insert(clients)
     .values({ phone, name: name ?? null })
     .onDuplicateKeyUpdate({ set: { name: name ?? null } });
   const result = await db.select().from(clients).where(eq(clients.phone, phone)).limit(1);
+  console.log(`[DB] upsertClient result: id=${result[0]?.id}, phone=${result[0]?.phone}`);
   return result[0]!;
 }
 
@@ -257,6 +280,7 @@ export async function getClientByPhone(phone: string): Promise<Client | undefine
   const db = await getDb();
   if (!db) return undefined;
   const result = await db.select().from(clients).where(eq(clients.phone, phone)).limit(1);
+  console.log(`[DB] getClientByPhone: phone=${phone}, found=${result[0]?.id}`);
   return result[0];
 }
 
@@ -271,9 +295,11 @@ export async function updateClientLocation(id: number, lat: string, lng: string)
 export async function createOtp(phone: string, code: string, expiresAt: Date): Promise<void> {
   const db = await getDb();
   if (!db) return;
+  console.log(`[DB] createOtp: phone=${phone}, code=${code}`);
   // Invalidate old codes
   await db.delete(otpCodes).where(eq(otpCodes.phone, phone));
   await db.insert(otpCodes).values({ phone, code, expiresAt });
+  console.log(`[DB] createOtp: success`);
 }
 
 export async function verifyOtp(phone: string, code: string): Promise<boolean> {
@@ -302,7 +328,14 @@ export async function verifyOtp(phone: string, code: string): Promise<boolean> {
 export async function createClientSession(clientId: number, token: string, expiresAt: Date): Promise<void> {
   const db = await getDb();
   if (!db) return;
-  await db.insert(clientSessions).values({ clientId, token, expiresAt });
+  try {
+    console.log(`[DB] createClientSession: clientId=${clientId}, token=${token}`);
+    await db.insert(clientSessions).values({ clientId, token, expiresAt });
+    console.log(`[DB] createClientSession: success`);
+  } catch (error) {
+    console.error(`[DB] createClientSession error:`, error);
+    throw error;
+  }
 }
 
 export async function getClientByToken(token: string): Promise<Client | undefined> {
@@ -314,6 +347,7 @@ export async function getClientByToken(token: string): Promise<Client | undefine
     .innerJoin(clients, eq(clientSessions.clientId, clients.id))
     .where(eq(clientSessions.token, token))
     .limit(1);
+  console.log(`[DB] getClientByToken: token=${token}, found=${result[0]?.client?.id}`);
   return result[0]?.client;
 }
 
@@ -328,6 +362,7 @@ export async function deleteClientSession(token: string): Promise<void> {
 export async function createRide(data: InsertRide): Promise<Ride> {
   const db = await getDb();
   if (!db) throw new Error("DB not available");
+  console.log(`[DB] createRide: clientId=${data.clientId}, status=${data.status}`);
   await db.insert(rides).values(data);
   const result = await db
     .select()
@@ -335,6 +370,7 @@ export async function createRide(data: InsertRide): Promise<Ride> {
     .where(eq(rides.clientId, data.clientId!))
     .orderBy(desc(rides.createdAt))
     .limit(1);
+  console.log(`[DB] createRide: created ride id=${result[0]?.id}`);
   return result[0]!;
 }
 
@@ -395,20 +431,28 @@ export async function getRideHistory(): Promise<Ride[]> {
 export async function getClientActiveRide(clientId: number): Promise<Ride | undefined> {
   const db = await getDb();
   if (!db) return undefined;
-  const result = await db
-    .select()
-    .from(rides)
-    .where(
-      and(
-        eq(rides.clientId, clientId),
-        ne(rides.status, "completed"),
-        ne(rides.status, "cancelled"),
-        ne(rides.status, "rejected")
+  console.log(`[DB] getClientActiveRide: clientId=${clientId}`);
+  try {
+    const result = await db
+      .select()
+      .from(rides)
+      .where(
+        and(
+          eq(rides.clientId, clientId),
+          ne(rides.status, "completed"),
+          ne(rides.status, "cancelled"),
+          ne(rides.status, "rejected")
+        )
       )
-    )
-    .orderBy(desc(rides.createdAt))
-    .limit(1);
-  return result[0];
+      .orderBy(desc(rides.createdAt))
+      .limit(1);
+    console.log(`[DB] getClientActiveRide: found=${result[0]?.id}, status=${result[0]?.status}`);
+    return result[0];
+  } catch (error: any) {
+    console.error(`[DB] getClientActiveRide error:`, error?.message || error);
+    if (error?.cause) console.error(`[DB] getClientActiveRide error cause:`, error.cause);
+    throw error;
+  }
 }
 
 export async function getDriverActiveRide(driverId: number): Promise<Ride | undefined> {

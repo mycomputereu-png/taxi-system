@@ -271,17 +271,22 @@ export const appRouter = router({
     verifyOtp: publicProcedure
       .input(z.object({ phone: z.string(), code: z.string() }))
       .mutation(async ({ input }) => {
+        console.log(`[verifyOtp] Starting for phone: ${input.phone}`);
         // Verify OTP code first
         const { verifyOtp: verifyOtpCode } = await import("./db");
         const isValid = await verifyOtpCode(input.phone, input.code);
+        console.log(`[verifyOtp] OTP valid: ${isValid}`);
         if (!isValid) throw new TRPCError({ code: "UNAUTHORIZED", message: "Invalid or expired OTP" });
         
+        console.log(`[verifyOtp] Upserting client...`);
         await upsertClient(input.phone);
         const client = await getClientByPhone(input.phone);
+        console.log(`[verifyOtp] Client after upsert: id=${client?.id}, phone=${client?.phone}`);
         if (!client) throw new TRPCError({ code: "NOT_FOUND" });
         const token = generateToken();
         const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
         await createClientSession(client.id, token, expiresAt);
+        console.log(`[verifyOtp] Session created for client ${client.id}`);
         return { token, client };
       }),
 
@@ -345,7 +350,9 @@ export const appRouter = router({
         })
       )
       .mutation(async ({ input }) => {
+        console.log(`[requestRide] Starting with token: ${input.token}`);
         const client = await getClientByToken(input.token);
+        console.log(`[requestRide] Client from token: id=${client?.id}, phone=${client?.phone}`);
         if (!client) throw new TRPCError({ code: "UNAUTHORIZED" });
         const ride = await createRide({
           clientId: client.id,
@@ -357,6 +364,7 @@ export const appRouter = router({
           destinationLng: input.destinationLng?.toString(),
           destinationAddress: input.destinationAddress,
         });
+        console.log(`[requestRide] Ride created: id=${ride.id}, clientId=${ride.clientId}`);
         emitToDispatchers("ride:new", {
           rideId: ride.id,
           clientId: client.id,
@@ -366,6 +374,7 @@ export const appRouter = router({
           lng: input.clientLng,
           address: input.clientAddress,
         });
+        console.log(`[requestRide] Emitted ride:new event`);
         return ride;
       }),
 

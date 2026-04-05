@@ -313,3 +313,19 @@
 - [x] Verified OTP validation works correctly before creating session
 - [x] Verified ride request creates proper database entry with client location
 - [x] Rides now appear in dispatcher when client calls taxi
+
+
+## 🐛 BUG FIX: Database query error - Unknown column 'distancekm' - FIXED
+- [x] Identified: Drizzle schema used camelCase `distanceKm` but MySQL expected `distance_km`
+- [x] Fixed schema mapping: changed `distanceKm: decimal("distanceKm")` to `distanceKm: decimal("distance_km")`
+- [x] Added `revenue` column migration (also was missing from database)
+- [x] Updated `runMigrations()` in server/db.ts to auto-add missing columns on startup
+- [x] Added migration: ALTER TABLE rides ADD COLUMN distance_km DECIMAL(8, 2)
+- [x] Added migration: ALTER TABLE rides ADD COLUMN revenue DECIMAL(10, 2)
+- [x] Added migration: ALTER TABLE rides CHANGE COLUMN distanceKm distance_km (if exists)
+- [x] Created comprehensive test: server/clientapp.ride.test.ts (3 tests passing)
+- [x] Verified: OTP creation and verification works
+- [x] Verified: Client session creation works
+- [x] Verified: Ride creation and retrieval works
+- [x] Verified: getClientActiveRide query now executes without errors
+- [x] Result: Dispatcher now receives rides when client calls taxi
