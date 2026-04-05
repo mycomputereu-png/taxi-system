@@ -227,3 +227,12 @@
 - [x] Route polyline draws on client map from driver to client
 - [x] Countdown timer updates in real-time
 - [x] Test: Assign driver -> client receives driver location -> route appears -> countdown starts
+
+
+## 🐛 BUG: Route and countdown don't appear after driver accepts ride
+- [x] Identified: drawRoute and calculateETA had empty dependency arrays
+- [x] Fixed drawRoute dependency array to include mapRef
+- [x] Fixed calculateETA dependency array to include state setters
+- [x] Route now updates dynamically as driver location changes
+- [x] Countdown updates in real-time after driver accepts
+- [x] Test: Driver accepts -> route appears on map -> countdown starts

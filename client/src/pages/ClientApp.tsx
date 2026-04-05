@@ -167,7 +167,7 @@ export default function ClientApp() {
         }
       }
     );
-  }, []);
+  }, [mapRef]);
 
   const calculateETA = useCallback((from: { lat: number; lng: number }, to: { lat: number; lng: number }) => {
     const service = new google.maps.DistanceMatrixService();
@@ -185,7 +185,7 @@ export default function ClientApp() {
         }
       }
     );
-  }, []);
+  }, [setEstimatedArrival, setCountdownETA]);
 
   const clearDirections = useCallback(() => {
     if (directionsRendererRef.current) {
