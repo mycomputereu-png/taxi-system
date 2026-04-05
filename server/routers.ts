@@ -205,6 +205,23 @@ export const appRouter = router({
         return { success: true };
       }),
 
+    updateRideDistance: publicProcedure
+      .input(z.object({ rideId: z.number(), distance_km: z.number() }))
+      .mutation(async ({ input }) => {
+        const ride = await getRideById(input.rideId);
+        if (!ride) throw new TRPCError({ code: "NOT_FOUND" });
+        const db = await import("./db").then((m) => m.getDb());
+        if (db) {
+          const { rides } = await import("../drizzle/schema");
+          const { eq } = await import("drizzle-orm");
+          await db
+            .update(rides)
+            .set({ distanceKm: input.distance_km.toString() })
+            .where(eq(rides.id, input.rideId));
+        }
+        return { success: true };
+      }),
+
     getActiveRide: publicProcedure
       .input(z.object({ token: z.string() }))
       .query(async ({ input }) => {

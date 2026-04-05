@@ -289,3 +289,14 @@
 - [x] Integrate DriverDetailsModal into Dispatcher UI
 - [ ] Calculate distance from GPS coordinates using Haversine formula
 - [ ] Test: Click driver -> modal opens -> shows rides filtered by period
+
+
+## 📏 FEATURE: Automatic distance calculation using GPS coordinates
+- [x] Create Haversine distance calculation utility function
+- [x] Track driver location throughout ride lifecycle (rideStartLocation state)
+- [x] Store driver's starting location when ride is accepted
+- [x] Calculate distance when ride completes using Haversine formula
+- [x] Add updateRideDistance procedure to driver router
+- [x] Store distance_km in rides table via mutation
+- [x] Display calculated distance in driver statistics modal
+- [ ] Test: Complete ride -> distance auto-calculated -> appears in statistics

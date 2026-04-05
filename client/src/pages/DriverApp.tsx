@@ -67,6 +67,7 @@ export default function DriverApp() {
   const socketRef = useRef<any>(null);
   const [driverPos, setDriverPos] = useState<{ lat: number; lng: number } | null>(null);
   const [estimatedArrival, setEstimatedArrival] = useState<number | null>(null);
+  const [rideStartLocation, setRideStartLocation] = useState<{ lat: number; lng: number } | null>(null);
 
   // tRPC
   const loginMut = trpc.driver.login.useMutation({
@@ -88,6 +89,10 @@ export default function DriverApp() {
     onSuccess: () => {
       toast.success("Cursă acceptată! Navigați la client.");
       setRideAccepted(true);
+      // Store driver's starting location for distance calculation
+      if (driverPos) {
+        setRideStartLocation(driverPos);
+      }
       if (pendingRide) {
         setActiveRide(pendingRide);
         setPendingRide(null);
@@ -117,6 +122,11 @@ export default function DriverApp() {
     onError: (e) => toast.error(e.message),
   });
 
+  // Calculate distance and update ride with distance_km
+  const updateRideDistanceMut = trpc.driver.updateRideDistance.useMutation({
+    onError: (e) => console.error("Failed to update ride distance:", e),
+  });
+
   const completeRideMut = trpc.driver.completeRide.useMutation({
     onSuccess: () => {
       toast.success("Cursă finalizată!");
@@ -126,9 +136,29 @@ export default function DriverApp() {
       if (activeRide && socketRef.current) {
         socketRef.current.emit("untrack:client", { clientId: activeRide.clientId });
       }
+      // Calculate distance if we have start and end locations
+      if (rideStartLocation && driverPos && activeRide) {
+        // Import Haversine function
+        import("../../../shared/distance").then(({ calculateHaversineDistance }) => {
+          const distance = calculateHaversineDistance(
+            rideStartLocation.lat,
+            rideStartLocation.lng,
+            driverPos.lat,
+            driverPos.lng
+          );
+          // Update ride with calculated distance
+          updateRideDistanceMut.mutate({
+            rideId: activeRide.id || activeRide.rideId,
+            distance_km: Math.round(distance * 100) / 100, // Round to 2 decimals
+          });
+        });
+      }
       setRideAccepted(false);
       setEstimatedArrival(null);
       clearDirections();
+      // Reset driver position for next ride
+      setDriverPos(null);
+      setRideStartLocation(null);
       if (session) {
         updateStatusMut.mutate({ token: session.token, status: "available" });
       }
