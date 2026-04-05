@@ -40,6 +40,36 @@ type AssignedRide = {
   address?: string;
 };
 
+type RideWithClient = {
+  id: number;
+  createdAt: Date;
+  updatedAt: Date;
+  status: string;
+  clientId: number;
+  driverId: number | null;
+  clientLat: string | null;
+  clientLng: string | null;
+  clientAddress: string | null;
+  destinationLat: string | null;
+  destinationLng: string | null;
+  destinationAddress: string | null;
+  estimatedArrival: number | null;
+  notes: string | null;
+  acceptedAt: Date | null;
+  completedAt: Date | null;
+  assignedAt: Date | null;
+  acceptanceTimeoutAt: Date | null;
+  distanceKm: string | null;
+  revenue: string | null;
+  client?: {
+    id: number;
+    phone: string;
+    name: string | null;
+    currentLat: string | null;
+    currentLng: string | null;
+  } | null;
+};
+
 export default function DriverApp() {
   // Auth
   const [session, setSession] = useState<DriverSession | null>(() => loadSession());
@@ -209,11 +239,12 @@ export default function DriverApp() {
     if (!activeRideQuery.data) return;
     const ride = activeRideQuery.data;
     if (ride.status === "assigned" && !rideAccepted) {
+      const rideData = ride as RideWithClient;
       setPendingRide({
         rideId: ride.id,
         clientId: ride.clientId,
-        clientPhone: ride.client?.phone,
-        clientName: ride.client?.name ?? undefined,
+        clientPhone: rideData.client?.phone,
+        clientName: rideData.client?.name ?? undefined,
         lat: parseFloat(String(ride.clientLat)),
         lng: parseFloat(String(ride.clientLng)),
         address: ride.clientAddress ?? undefined,

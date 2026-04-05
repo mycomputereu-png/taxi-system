@@ -39,6 +39,7 @@ import {
   getActivePanicAlerts,
   getPanicAlertsByDriver,
   updatePanicAlertStatus,
+  type ActiveRide,
 } from "./db";
 import { getSessionCookieOptions } from "./_core/cookies";
 const COOKIE_NAME = "session";
@@ -270,6 +271,11 @@ export const appRouter = router({
     verifyOtp: publicProcedure
       .input(z.object({ phone: z.string(), code: z.string() }))
       .mutation(async ({ input }) => {
+        // Verify OTP code first
+        const { verifyOtp: verifyOtpCode } = await import("./db");
+        const isValid = await verifyOtpCode(input.phone, input.code);
+        if (!isValid) throw new TRPCError({ code: "UNAUTHORIZED", message: "Invalid or expired OTP" });
+        
         await upsertClient(input.phone);
         const client = await getClientByPhone(input.phone);
         if (!client) throw new TRPCError({ code: "NOT_FOUND" });
@@ -472,7 +478,7 @@ export const appRouter = router({
       return getPendingRides();
     }),
 
-    getActiveRides: protectedProcedure.query(async () => {
+    getActiveRides: protectedProcedure.query(async (): Promise<ActiveRide[]> => {
       return getActiveRides();
     }),
 

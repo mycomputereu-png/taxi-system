@@ -36,6 +36,44 @@ type ClientMarker = {
   marker?: google.maps.Marker;
 };
 
+type RideWithClientDriver = {
+  id: number;
+  createdAt: Date;
+  updatedAt: Date;
+  status: string;
+  clientId: number;
+  driverId: number | null;
+  clientLat: string | null;
+  clientLng: string | null;
+  clientAddress: string | null;
+  destinationLat: string | null;
+  destinationLng: string | null;
+  destinationAddress: string | null;
+  estimatedArrival: number | null;
+  notes: string | null;
+  acceptedAt: Date | null;
+  completedAt: Date | null;
+  assignedAt: Date | null;
+  acceptanceTimeoutAt: Date | null;
+  distanceKm: string | null;
+  revenue: string | null;
+  client?: {
+    id: number;
+    phone: string;
+    name: string | null;
+    currentLat: string | null;
+    currentLng: string | null;
+  } | null;
+  driver?: {
+    id: number;
+    name: string;
+    phone: string | null;
+    username: string;
+    carPlate: string | null;
+    carBrand: string | null;
+  } | null;
+};
+
 export default function Dispatcher() {
   const { user, loading, isAuthenticated, logout } = useAuth();
   const { emit, on, socket: socketRef } = useSocket();
@@ -867,8 +905,8 @@ export default function Dispatcher() {
                   <CardContent className="p-3">
                     <div className="flex items-start justify-between">
                       <div>
-                        <p className="text-white text-sm font-medium">#{ride.id} - {ride.client?.name || ride.client?.phone}</p>
-                        <p className="text-gray-400 text-xs">Șofer: {ride.driver?.name || "—"}</p>
+                        <p className="text-white text-sm font-medium">#{ride.id} - {(ride as RideWithClientDriver).client?.name || (ride as RideWithClientDriver).client?.phone}</p>
+                        <p className="text-gray-400 text-xs">Șofer: {(ride as RideWithClientDriver).driver?.name || "—"}</p>
                         <p className="text-gray-500 text-xs">{new Date(ride.createdAt).toLocaleString("ro-RO")}</p>
                       </div>
                       <Badge

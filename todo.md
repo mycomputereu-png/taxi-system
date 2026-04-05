@@ -300,3 +300,16 @@
 - [x] Store distance_km in rides table via mutation
 - [x] Display calculated distance in driver statistics modal
 - [ ] Test: Complete ride -> distance auto-calculated -> appears in statistics
+
+
+## 🐛 BUG FIXES: OTP Verification and Ride Request Issues (FIXED)
+- [x] Fixed verifyOtp not actually verifying OTP code - now calls verifyOtp from db.ts
+- [x] Fixed TypeScript errors in Dispatcher.tsx - added RideWithClientDriver type with client/driver properties
+- [x] Fixed TypeScript errors in DriverApp.tsx - added RideWithClient type with client property
+- [x] Fixed TypeScript errors in ClientApp.tsx - added RideWithDriver type with driver property
+- [x] Fixed ClientProfile.tsx type errors - added proper type casting for profile data
+- [x] Created ActiveRide type in db.ts and exported for use in routers
+- [x] Added vitest tests for clientApp.verifyOtp and requestRide (4 tests passing)
+- [x] Verified OTP validation works correctly before creating session
+- [x] Verified ride request creates proper database entry with client location
+- [x] Rides now appear in dispatcher when client calls taxi

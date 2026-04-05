@@ -24,8 +24,8 @@ export default function ClientProfile({ token, onBack }: ClientProfileProps) {
 
 
 
-  const profile = profileQuery.data;
-  const { client, rides, ratingsReceived, avgRating, totalRatings, completedRides } = profile;
+  const profile = profileQuery.data as any;
+  const { client = {}, rides = [], ratingsReceived = [], avgRating = 0, totalRatings = 0, completedRides = 0 } = profile || {};
 
   return (
     <div className="min-h-screen bg-gray-900 text-white">
@@ -91,7 +91,7 @@ export default function ClientProfile({ token, onBack }: ClientProfileProps) {
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
-              {ratingsReceived.map((item, idx) => (
+              {(ratingsReceived as any[]).map((item, idx) => (
                 <div
                   key={idx}
                   className="border border-gray-700 rounded-lg p-3 bg-gray-900"
@@ -136,8 +136,8 @@ export default function ClientProfile({ token, onBack }: ClientProfileProps) {
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
-            {rides.length > 0 ? (
-              rides.map((item, idx) => (
+            {rides && rides.length > 0 ? (
+              (rides as any[]).map((item, idx) => (
                 <div
                   key={idx}
                   className="border border-gray-700 rounded-lg p-3 bg-gray-900"

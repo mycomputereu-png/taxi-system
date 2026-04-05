@@ -24,6 +24,25 @@ import {
 } from "../drizzle/schema";
 import { ENV } from "./_core/env";
 
+// Type for rides with nested client and driver info
+export type ActiveRide = Ride & {
+  client?: {
+    id: number;
+    phone: string;
+    name: string | null;
+    currentLat: string | null;
+    currentLng: string | null;
+  } | null;
+  driver?: {
+    id: number;
+    name: string;
+    phone: string | null;
+    username: string;
+    carPlate: string | null;
+    carBrand: string | null;
+  } | null;
+};
+
 let _db: ReturnType<typeof drizzle> | null = null;
 
 export async function getDb() {
@@ -332,7 +351,7 @@ export async function getPendingRides(): Promise<Ride[]> {
   return db.select().from(rides).where(eq(rides.status, "pending")).orderBy(desc(rides.createdAt));
 }
 
-export async function getActiveRides(): Promise<any[]> {
+export async function getActiveRides(): Promise<ActiveRide[]> {
   const db = await getDb();
   if (!db) return [];
   return db

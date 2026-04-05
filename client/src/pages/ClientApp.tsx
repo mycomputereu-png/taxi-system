@@ -33,6 +33,37 @@ function clearSession() {
 
 type RideStatus = "idle" | "requesting" | "pending" | "assigned" | "accepted" | "in_progress" | "completed" | "rejected" | "cancelled";
 
+type RideWithDriver = {
+  id: number;
+  createdAt: Date;
+  updatedAt: Date;
+  status: string;
+  clientId: number;
+  driverId: number | null;
+  clientLat: string | null;
+  clientLng: string | null;
+  clientAddress: string | null;
+  destinationLat: string | null;
+  destinationLng: string | null;
+  destinationAddress: string | null;
+  estimatedArrival: number | null;
+  notes: string | null;
+  acceptedAt: Date | null;
+  completedAt: Date | null;
+  assignedAt: Date | null;
+  acceptanceTimeoutAt: Date | null;
+  distanceKm: string | null;
+  revenue: string | null;
+  driver?: {
+    id: number;
+    name: string;
+    phone: string | null;
+    username: string;
+    carPlate: string | null;
+    carBrand: string | null;
+  } | null;
+};
+
 export default function ClientApp() {
   const { emit, on } = useSocket();
 
@@ -102,9 +133,9 @@ export default function ClientApp() {
   });
 
   const requestRideMut = trpc.clientApp.requestRide.useMutation({
-    onSuccess: (data) => {
-      if (data?.ride?.id) {
-        setRideId(data.ride.id);
+    onSuccess: (data: any) => {
+      if (data?.id) {
+        setRideId(data.id);
         setRideStatus("pending");
         toast.success("Cerere trimisă la dispatcher!");
       }
@@ -233,7 +264,7 @@ export default function ClientApp() {
   // Sync active ride from server
   useEffect(() => {
     if (!activeRideQuery.data) return;
-    const ride = activeRideQuery.data;
+    const ride = activeRideQuery.data as RideWithDriver | undefined;
     if (ride?.id) {
       setRideId(ride.id);
       setRideStatus(ride.status as RideStatus);
