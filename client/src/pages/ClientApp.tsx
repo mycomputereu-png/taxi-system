@@ -185,52 +185,6 @@ export default function ClientApp() {
     driverMarkerRef.current.setPosition({ lat, lng });
   }, []);
 
-  const drawRoute = useCallback((from: { lat: number; lng: number }, to: { lat: number; lng: number }) => {
-    if (!mapRef.current) return;
-    if (!directionsRendererRef.current) {
-      directionsRendererRef.current = new google.maps.DirectionsRenderer({
-        map: mapRef.current,
-        suppressMarkers: true,
-        polylineOptions: {
-          strokeColor: "#3b82f6",
-          strokeWeight: 5,
-          strokeOpacity: 0.8,
-        },
-      });
-    }
-    const service = new google.maps.DirectionsService();
-    service.route(
-      {
-        origin: from,
-        destination: to,
-        travelMode: google.maps.TravelMode.DRIVING,
-      },
-      (result, status) => {
-        if (status === "OK" && result) {
-          directionsRendererRef.current!.setDirections(result);
-        }
-      }
-    );
-  }, [mapRef]);
-
-  const calculateETA = useCallback((from: { lat: number; lng: number }, to: { lat: number; lng: number }) => {
-    const service = new google.maps.DistanceMatrixService();
-    service.getDistanceMatrix(
-      {
-        origins: [from],
-        destinations: [to],
-        travelMode: google.maps.TravelMode.DRIVING,
-      },
-      (result, status) => {
-        if (status === "OK" && result?.rows[0]?.elements[0]?.duration) {
-          const minutes = Math.ceil(result.rows[0].elements[0].duration.value / 60);
-          setEstimatedArrival(minutes);
-          setCountdownETA(minutes);
-        }
-      }
-    );
-  }, [setEstimatedArrival, setCountdownETA]);
-
   // Reset arrival notification when ride ends
   useEffect(() => {
     if (rideStatus === "completed" || rideStatus === "cancelled" || rideStatus === "rejected") {
@@ -239,6 +193,8 @@ export default function ClientApp() {
       setDriverArrived(false);
     }
   }, [rideStatus]);
+
+  // Calculate distance between two coordinates (in meters)
 
   const clearDirections = useCallback(() => {
     if (directionsRendererRef.current) {
@@ -352,8 +308,39 @@ export default function ClientApp() {
       setDriverPos({ lat: data.lat, lng: data.lng });
       updateDriverMarker(data.lat, data.lng);
       if (clientPos) {
-        drawRoute({ lat: data.lat, lng: data.lng }, clientPos);
-        calculateETA({ lat: data.lat, lng: data.lng }, clientPos);
+        // Draw route using DirectionsService
+        if (mapRef.current && directionsRendererRef.current) {
+          const directionsService = new google.maps.DirectionsService();
+          directionsService.route(
+            {
+              origin: { lat: data.lat, lng: data.lng },
+              destination: clientPos,
+              travelMode: google.maps.TravelMode.DRIVING,
+            },
+            (result, status) => {
+              if (status === "OK" && result && directionsRendererRef.current) {
+                directionsRendererRef.current.setDirections(result);
+              }
+            }
+          );
+        }
+        
+        // Calculate ETA
+        const distanceService = new google.maps.DistanceMatrixService();
+        distanceService.getDistanceMatrix(
+          {
+            origins: [{ lat: data.lat, lng: data.lng }],
+            destinations: [clientPos],
+            travelMode: google.maps.TravelMode.DRIVING,
+          },
+          (result, status) => {
+            if (status === "OK" && result?.rows[0]?.elements[0]?.duration) {
+              const minutes = Math.ceil(result.rows[0].elements[0].duration.value / 60);
+              setEstimatedArrival(minutes);
+              setCountdownETA(minutes);
+            }
+          }
+        );
         
         // Check if driver is within 50 meters of client
         const distance = calculateDistance(data.lat, data.lng, clientPos.lat, clientPos.lng);
@@ -366,7 +353,7 @@ export default function ClientApp() {
         }
       }
     });
-  }, [on, clientPos, updateDriverMarker, drawRoute, calculateETA, rideStatus]);
+  }, [on, clientPos, updateDriverMarker, rideStatus]);
 
   // GPS tracking
   useEffect(() => {

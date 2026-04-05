@@ -246,3 +246,11 @@
 - [x] Add dismiss button ("Am iesit din casa")
 - [x] Reset notification state when ride ends
 - [x] Test: Driver approaches -> notification triggers at 50m -> sound plays + alert shows
+
+
+## 🐛 BUG: Route and countdown not showing after driver accepts ride
+- [x] Identified: drawRoute and calculateETA had dependency arrays preventing re-execution
+- [x] Moved route drawing logic directly into driver:location:update handler
+- [x] Route now draws on every location update using DirectionsService
+- [x] ETA recalculates on every location update using DistanceMatrixService
+- [x] Test: Driver accepts -> route appears -> countdown starts
