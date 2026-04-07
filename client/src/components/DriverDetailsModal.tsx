@@ -125,7 +125,7 @@ export function DriverDetailsModal({ open, onOpenChange, driver }: DriverDetails
             >
               Azi
             </Button>
-            <span className="text-xs text-slate-400">({todayRides.length})</span>
+            <span className="text-xs text-slate-400">{todayRides.length}</span>
           </div>
           <div className="flex flex-col items-center gap-1">
             <Button
@@ -135,7 +135,7 @@ export function DriverDetailsModal({ open, onOpenChange, driver }: DriverDetails
             >
               Săptămâna
             </Button>
-            <span className="text-xs text-slate-400">({weekRides.length})</span>
+            <span className="text-xs text-slate-400">{weekRides.length}</span>
           </div>
           <div className="flex flex-col items-center gap-1">
             <Button
@@ -145,7 +145,7 @@ export function DriverDetailsModal({ open, onOpenChange, driver }: DriverDetails
             >
               Luna
             </Button>
-            <span className="text-xs text-slate-400">({monthRides.length})</span>
+            <span className="text-xs text-slate-400">{monthRides.length}</span>
           </div>
           <div className="flex flex-col items-center gap-1">
             <Button
@@ -155,7 +155,7 @@ export function DriverDetailsModal({ open, onOpenChange, driver }: DriverDetails
             >
               Tot
             </Button>
-            <span className="text-xs text-slate-400">({allRides.length})</span>
+            <span className="text-xs text-slate-400">{allRides.length}</span>
           </div>
         </div>
 
