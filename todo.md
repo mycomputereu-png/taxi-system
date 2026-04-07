@@ -337,3 +337,6 @@
 - [x] Update Dispatcher UI to display ride counts under driver details
 - [x] Show counts for: Azi (Today), Săptămâna (Week), Luna (Month), Tot (All)
 - [x] Test end-to-end: select driver -> see ride counts by period
+- [x] Add ride count badges under each period button (Azi (3), Săptămâna (15), Luna (50), Tot (120))
+- [x] Fetch ride counts for all periods simultaneously
+- [x] Display counts in gray text below each filter button

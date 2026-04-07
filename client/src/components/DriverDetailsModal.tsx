@@ -24,9 +24,9 @@ export function DriverDetailsModal({ open, onOpenChange, driver }: DriverDetails
   const [period, setPeriod] = useState<PeriodType>("today");
 
   // Calculate date range based on period
-  const getDateRange = () => {
+  const getDateRange = (p: PeriodType) => {
     const now = new Date();
-    switch (period) {
+    switch (p) {
       case "today":
         return { startDate: startOfDay(now), endDate: endOfDay(now) };
       case "week":
@@ -38,9 +38,39 @@ export function DriverDetailsModal({ open, onOpenChange, driver }: DriverDetails
     }
   };
 
-  const dateRange = getDateRange();
+  const dateRange = getDateRange(period);
 
-  // Fetch driver rides
+  // Fetch ride counts for all periods
+  const todayRange = getDateRange("today");
+  const weekRange = getDateRange("week");
+  const monthRange = getDateRange("month");
+  const allRange = getDateRange("all");
+
+  const { data: todayRides = [] } = trpc.dispatcher.getDriverRides.useQuery({
+    driverId: driver.id,
+    startDate: todayRange.startDate,
+    endDate: todayRange.endDate,
+  });
+
+  const { data: weekRides = [] } = trpc.dispatcher.getDriverRides.useQuery({
+    driverId: driver.id,
+    startDate: weekRange.startDate,
+    endDate: weekRange.endDate,
+  });
+
+  const { data: monthRides = [] } = trpc.dispatcher.getDriverRides.useQuery({
+    driverId: driver.id,
+    startDate: monthRange.startDate,
+    endDate: monthRange.endDate,
+  });
+
+  const { data: allRides = [] } = trpc.dispatcher.getDriverRides.useQuery({
+    driverId: driver.id,
+    startDate: allRange.startDate,
+    endDate: allRange.endDate,
+  });
+
+  // Fetch driver rides for current period
   const { data: rides = [], isLoading: ridesLoading } = trpc.dispatcher.getDriverRides.useQuery({
     driverId: driver.id,
     startDate: dateRange.startDate,
@@ -86,35 +116,47 @@ export function DriverDetailsModal({ open, onOpenChange, driver }: DriverDetails
         </div>
 
         {/* Period Filter */}
-        <div className="flex gap-2 p-4">
-          <Button
-            variant={period === "today" ? "default" : "outline"}
-            onClick={() => setPeriod("today")}
-            size="sm"
-          >
-            Azi
-          </Button>
-          <Button
-            variant={period === "week" ? "default" : "outline"}
-            onClick={() => setPeriod("week")}
-            size="sm"
-          >
-            Săptămâna
-          </Button>
-          <Button
-            variant={period === "month" ? "default" : "outline"}
-            onClick={() => setPeriod("month")}
-            size="sm"
-          >
-            Luna
-          </Button>
-          <Button
-            variant={period === "all" ? "default" : "outline"}
-            onClick={() => setPeriod("all")}
-            size="sm"
-          >
-            Tot
-          </Button>
+        <div className="flex gap-4 p-4 flex-wrap">
+          <div className="flex flex-col items-center gap-1">
+            <Button
+              variant={period === "today" ? "default" : "outline"}
+              onClick={() => setPeriod("today")}
+              size="sm"
+            >
+              Azi
+            </Button>
+            <span className="text-xs text-slate-400">({todayRides.length})</span>
+          </div>
+          <div className="flex flex-col items-center gap-1">
+            <Button
+              variant={period === "week" ? "default" : "outline"}
+              onClick={() => setPeriod("week")}
+              size="sm"
+            >
+              Săptămâna
+            </Button>
+            <span className="text-xs text-slate-400">({weekRides.length})</span>
+          </div>
+          <div className="flex flex-col items-center gap-1">
+            <Button
+              variant={period === "month" ? "default" : "outline"}
+              onClick={() => setPeriod("month")}
+              size="sm"
+            >
+              Luna
+            </Button>
+            <span className="text-xs text-slate-400">({monthRides.length})</span>
+          </div>
+          <div className="flex flex-col items-center gap-1">
+            <Button
+              variant={period === "all" ? "default" : "outline"}
+              onClick={() => setPeriod("all")}
+              size="sm"
+            >
+              Tot
+            </Button>
+            <span className="text-xs text-slate-400">({allRides.length})</span>
+          </div>
         </div>
 
         {/* Statistics */}
