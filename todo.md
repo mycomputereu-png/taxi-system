@@ -329,3 +329,11 @@
 - [x] Verified: Ride creation and retrieval works
 - [x] Verified: getClientActiveRide query now executes without errors
 - [x] Result: Dispatcher now receives rides when client calls taxi
+
+
+## 📊 FEATURE: Driver ride count statistics in dispatcher details panel
+- [x] Add database query to get driver ride counts by time period (Today, Week, Month, All)
+- [x] Create tRPC procedure dispatcher.getDriverStats with ride counts
+- [x] Update Dispatcher UI to display ride counts under driver details
+- [x] Show counts for: Azi (Today), Săptămâna (Week), Luna (Month), Tot (All)
+- [x] Test end-to-end: select driver -> see ride counts by period
