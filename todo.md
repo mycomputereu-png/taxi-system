@@ -349,3 +349,6 @@
 - [x] Fixed MapView default center from San Francisco to (0,0)
 - [x] Improved geolocation handling in ClientApp and DriverApp
 - [x] Only show fallback location after GPS fails, not before
+
+
+- [x] Color dispatcher filter buttons: Asteptare (red), Active (blue), Soferi (green), Clienti (yellow)
