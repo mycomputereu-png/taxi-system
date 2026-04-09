@@ -340,3 +340,12 @@
 - [x] Add ride count badges under each period button (Azi (3), Săptămâna (15), Luna (50), Tot (120))
 - [x] Fetch ride counts for all periods simultaneously
 - [x] Display counts in gray text below each filter button
+
+
+## 🐛 BUG: GPS initialization delay in Client and Driver apps
+- [x] Remove test location (Colorado) that appears on initial load
+- [x] Add loading state while waiting for real GPS location
+- [x] Ensure only real GPS location is shown to users
+- [x] Fixed MapView default center from San Francisco to (0,0)
+- [x] Improved geolocation handling in ClientApp and DriverApp
+- [x] Only show fallback location after GPS fails, not before
