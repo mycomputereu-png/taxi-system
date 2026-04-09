@@ -546,7 +546,7 @@ export default function Dispatcher() {
 
           <Tabs defaultValue="pending" className="flex flex-col flex-1 overflow-hidden">
             <TabsList className="grid grid-cols-5 m-3 bg-gray-800">
-              <TabsTrigger value="pending" className="data-[state=active]:bg-red-600 data-[state=active]:text-white text-xs font-semibold">
+              <TabsTrigger value="pending" className="text-xs font-semibold dispatcher-tab-pending">
                 <Car className="w-3 h-3 mr-1" /> Așteptare
                 {pendingRides.length > 0 && (
                   <span className="ml-1 bg-red-600 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center font-bold animate-pulse">
@@ -554,7 +554,7 @@ export default function Dispatcher() {
                   </span>
                 )}
               </TabsTrigger>
-              <TabsTrigger value="active" className="data-[state=active]:bg-blue-600 data-[state=active]:text-white text-xs font-semibold">
+              <TabsTrigger value="active" className="text-xs font-semibold dispatcher-tab-active">
                 <Car className="w-3 h-3 mr-1" /> Active
                 {assignedRides.length > 0 && (
                   <span className="ml-1 bg-blue-600 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center font-bold">
@@ -562,10 +562,10 @@ export default function Dispatcher() {
                   </span>
                 )}
               </TabsTrigger>
-              <TabsTrigger value="drivers" className="data-[state=active]:bg-green-600 data-[state=active]:text-white text-xs font-semibold">
+              <TabsTrigger value="drivers" className="text-xs font-semibold dispatcher-tab-drivers">
                 <Users className="w-3 h-3 mr-1" /> Șoferi
               </TabsTrigger>
-              <TabsTrigger value="clients" className="data-[state=active]:bg-yellow-500 data-[state=active]:text-black text-xs font-semibold">
+              <TabsTrigger value="clients" className="text-xs font-semibold dispatcher-tab-clients">
                 <Users className="w-3 h-3 mr-1" /> Clienți
               </TabsTrigger>
               <TabsTrigger value="panic" className="data-[state=active]:bg-red-600 data-[state=active]:text-white text-xs">
