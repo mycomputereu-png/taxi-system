@@ -568,7 +568,7 @@ export default function Dispatcher() {
               <TabsTrigger value="clients" className="text-xs font-semibold dispatcher-tab-clients">
                 <Users className="w-3 h-3 mr-1" /> Clienți
               </TabsTrigger>
-              <TabsTrigger value="panic" className="data-[state=active]:bg-red-600 data-[state=active]:text-white text-xs">
+              <TabsTrigger value="panic" className="text-xs font-semibold dispatcher-tab-panic">
                 <span className="text-lg mr-1">🚨</span> Urgență
                 {panicAlertsQuery.data && panicAlertsQuery.data.length > 0 && (
                   <span className="ml-1 bg-red-600 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center font-bold animate-pulse">

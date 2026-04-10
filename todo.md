@@ -352,3 +352,7 @@
 
 
 - [x] Color dispatcher filter buttons: Asteptare (red), Active (blue), Soferi (green), Clienti (yellow)
+
+
+- [x] Add color to Urgență button in dispatcher
+- [x] Make active button state clearly visible with border/shadow/highlight

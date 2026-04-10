@@ -226,3 +226,39 @@
   background-color: rgb(55, 65, 81) !important;
   color: rgb(209, 213, 219) !important;
 }
+
+/* Active state for all tabs - add border and shadow */
+[data-state="active"].dispatcher-tab-pending {
+  background-color: rgb(220, 38, 38) !important;
+  color: white !important;
+  border-bottom: 3px solid rgb(248, 113, 113) !important;
+  box-shadow: 0 0 8px rgba(220, 38, 38, 0.5) !important;
+}
+
+[data-state="active"].dispatcher-tab-active {
+  background-color: rgb(37, 99, 235) !important;
+  color: white !important;
+  border-bottom: 3px solid rgb(96, 165, 250) !important;
+  box-shadow: 0 0 8px rgba(37, 99, 235, 0.5) !important;
+}
+
+[data-state="active"].dispatcher-tab-drivers {
+  background-color: rgb(34, 197, 94) !important;
+  color: white !important;
+  border-bottom: 3px solid rgb(74, 222, 128) !important;
+  box-shadow: 0 0 8px rgba(34, 197, 94, 0.5) !important;
+}
+
+[data-state="active"].dispatcher-tab-clients {
+  background-color: rgb(234, 179, 8) !important;
+  color: black !important;
+  border-bottom: 3px solid rgb(253, 224, 71) !important;
+  box-shadow: 0 0 8px rgba(234, 179, 8, 0.5) !important;
+}
+
+[data-state="active"].dispatcher-tab-panic {
+  background-color: rgb(220, 38, 38) !important;
+  color: white !important;
+  border-bottom: 3px solid rgb(248, 113, 113) !important;
+  box-shadow: 0 0 12px rgba(220, 38, 38, 0.7) !important;
+}
