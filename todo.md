@@ -379,3 +379,10 @@
 - [x] Rename "Urgență" button to "SOS" in Dispatcher
 - [x] Verify button styling and colors remain intact
 - [x] Test all filter functionality with new labels
+
+## UI Updates - Client Profile Modal Restructuring
+- [x] Remove separate "Evaluări Primite" and "Istoric Curse" tabs
+- [x] Combine into single "Istoric Curse" view
+- [x] Display ratings inline with each ride in history
+- [x] Show rating stars, comment, and driver info for each rated ride
+- [x] Test profile modal displays correctly with inline ratings (6 tests passing)

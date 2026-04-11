@@ -561,14 +561,16 @@ export async function getClientProfile(clientId: number) {
     .where(eq(rides.clientId, clientId))
     .orderBy(desc(rides.createdAt));
 
-  // Get all ratings received by this client with driver info
+  // Get all ratings received by this client with driver and ride info
   const ratingsReceived = await db
     .select({
       rating: clientRatings,
       driver: drivers,
+      ride: rides,
     })
     .from(clientRatings)
     .leftJoin(drivers, eq(clientRatings.driverId, drivers.id))
+    .leftJoin(rides, eq(clientRatings.rideId, rides.id))
     .where(eq(clientRatings.clientId, clientId))
     .orderBy(desc(clientRatings.createdAt));
 
