@@ -356,3 +356,8 @@
 
 - [x] Add color to Urgență button in dispatcher
 - [x] Make active button state clearly visible with border/shadow/highlight
+
+
+- [x] Add driver availability toggle button (Disponibil/Indisponibil) in DriverApp
+- [x] Create tRPC procedure to update driver status
+- [x] Show status changes in real-time to dispatcher

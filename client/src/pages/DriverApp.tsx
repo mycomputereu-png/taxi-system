@@ -86,6 +86,7 @@ export default function DriverApp() {
   const [acceptanceCountdown, setAcceptanceCountdown] = useState<number | null>(null); // 30, 29, ..., 0
   const [showPanicConfirm, setShowPanicConfirm] = useState(false);
   const [panicAlertId, setPanicAlertId] = useState<number | null>(null);
+  const [driverAvailable, setDriverAvailable] = useState(true); // true = Disponibil, false = Indisponibil
 
   // Map
   const [mapReady, setMapReady] = useState(false);
@@ -543,14 +544,23 @@ export default function DriverApp() {
           <span className="text-yellow-400 font-bold">{session.name}</span>
         </div>
         <div className="flex items-center gap-3">
-          <Badge
-            className={`text-xs ${
-              rideAccepted || activeRide ? "bg-orange-700" :
-              pendingRide ? "bg-blue-700" : "bg-green-700"
+          {/* Availability Toggle Button */}
+          <Button
+            onClick={() => {
+              const newStatus = !driverAvailable ? "available" : "offline";
+              updateStatusMut.mutate({ token: session.token, status: newStatus });
+              setDriverAvailable(!driverAvailable);
+              toast.success(`Status: ${!driverAvailable ? "Disponibil" : "Indisponibil"}`);
+            }}
+            className={`text-xs font-semibold px-4 py-2 ${
+              rideAccepted || activeRide ? "bg-orange-700 hover:bg-orange-800" :
+              pendingRide ? "bg-blue-700 hover:bg-blue-800" :
+              driverAvailable ? "bg-green-700 hover:bg-green-800" : "bg-red-700 hover:bg-red-800"
             }`}
+            disabled={rideAccepted || activeRide || pendingRide}
           >
-            {rideAccepted || activeRide ? "Ocupat" : pendingRide ? "Cursă nouă!" : "Disponibil"}
-          </Badge>
+            {rideAccepted || activeRide ? "Ocupat" : pendingRide ? "Cursă nouă!" : driverAvailable ? "Disponibil" : "Indisponibil"}
+          </Button>
           <Button variant="ghost" size="sm" onClick={handleLogout} className="text-gray-400 hover:text-white text-xs">
             Ieșire
           </Button>
@@ -581,10 +591,16 @@ export default function DriverApp() {
           </div>
         )}
 
-        {!rideAccepted && !pendingRide && (
+        {!rideAccepted && !pendingRide && driverAvailable && (
           <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-green-900 bg-opacity-90 rounded-xl px-4 py-2 flex items-center gap-2 shadow-lg">
             <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
             <span className="text-white text-sm">Disponibil - așteptați curse</span>
+          </div>
+        )}
+        {!rideAccepted && !pendingRide && !driverAvailable && (
+          <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-red-900 bg-opacity-90 rounded-xl px-4 py-2 flex items-center gap-2 shadow-lg">
+            <div className="w-2 h-2 bg-red-400 rounded-full animate-pulse"></div>
+            <span className="text-white text-sm">Indisponibil - nu primesc curse</span>
           </div>
         )}
       </div>
@@ -703,7 +719,7 @@ export default function DriverApp() {
         {!pendingRide && !rideAccepted && !activeRide && (
           <div className="text-center py-4">
             <Car className="w-12 h-12 mx-auto text-gray-600 mb-2" />
-            <p className="text-gray-400">Disponibil - așteptați curse noi</p>
+            <p className="text-gray-400">{driverAvailable ? "Disponibil - așteptați curse noi" : "Indisponibil - nu primesc curse"}</p>
             <p className="text-gray-600 text-xs mt-1">GPS activ, locația se transmite în timp real</p>
           </div>
         )}
