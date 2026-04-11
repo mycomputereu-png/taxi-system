@@ -393,3 +393,9 @@
 - [x] Display client rating in card
 - [x] Display number of rides in card
 - [x] Test scrolling and layout on different screen sizes
+
+
+## Bug Fixes - Clients List Stats Display
+- [x] Fix rideCount not being returned from backend getAllClientsWithRatings query
+- [x] Ensure avgRating is correctly calculated and returned
+- [x] Verify client cards display correct ride count and rating (8 tests passing)

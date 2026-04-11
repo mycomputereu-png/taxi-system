@@ -528,14 +528,18 @@ export async function getAllClientsWithRatings() {
   const db = await getDb();
   if (!db) return [];
   const { sql } = await import("drizzle-orm");
+  
+  // Get clients with ratings and ride count
   const result = await db
     .select({
       client: clients,
       avgRating: sql<number>`AVG(${clientRatings.rating})`,
-      ratingCount: sql<number>`COUNT(${clientRatings.id})`,
+      ratingCount: sql<number>`COUNT(DISTINCT ${clientRatings.id})`,
+      rideCount: sql<number>`COUNT(DISTINCT ${rides.id})`,
     })
     .from(clients)
     .leftJoin(clientRatings, eq(clients.id, clientRatings.clientId))
+    .leftJoin(rides, eq(clients.id, rides.clientId))
     .groupBy(clients.id);
   return result;
 }
