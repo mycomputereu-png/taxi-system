@@ -542,7 +542,7 @@ export default function Dispatcher() {
           {/* Stats Bar */}
           <div className="px-3 py-3 border-b border-gray-800 grid grid-cols-3 gap-2">
             <Card className="bg-gray-800 border-gray-700 p-2">
-              <div className="text-xs text-gray-400">Așteptare</div>
+              <div className="text-xs text-gray-400">Curse</div>
               <div className="text-lg font-bold text-red-400">{pendingRides.length}</div>
             </Card>
             <Card className="bg-gray-800 border-gray-700 p-2">
@@ -558,7 +558,7 @@ export default function Dispatcher() {
           <Tabs defaultValue="pending" className="flex flex-col flex-1 overflow-hidden">
             <TabsList className="grid grid-cols-5 m-3 bg-gray-800">
               <TabsTrigger value="pending" className="text-xs font-semibold dispatcher-tab-pending">
-                <Car className="w-3 h-3 mr-1" /> Așteptare
+                <Car className="w-3 h-3 mr-1" /> Curse
                 {pendingRides.length > 0 && (
                   <span className="ml-1 bg-red-600 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center font-bold animate-pulse">
                     {pendingRides.length}
@@ -580,7 +580,7 @@ export default function Dispatcher() {
                 <Users className="w-3 h-3 mr-1" /> Clienți
               </TabsTrigger>
               <TabsTrigger value="panic" className="text-xs font-semibold dispatcher-tab-panic">
-                <span className="text-lg mr-1">🚨</span> Urgență
+                <span className="text-lg mr-1">🚨</span> SOS
                 {panicAlertsQuery.data && panicAlertsQuery.data.length > 0 && (
                   <span className="ml-1 bg-red-600 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center font-bold animate-pulse">
                     {panicAlertsQuery.data.length}
@@ -869,7 +869,7 @@ export default function Dispatcher() {
             {/* Panic Alerts Tab */}
             <TabsContent value="panic" className="flex-1 overflow-y-auto px-3 pb-3 mt-0">
               <h3 className="text-sm font-semibold text-red-400 mb-3 flex items-center gap-2">
-                <span className="text-lg">🚨</span> Alerte de Urgență
+                <span className="text-lg">🚨</span> Alerte SOS
               </h3>
               {panicAlertsQuery.data && panicAlertsQuery.data.length > 0 ? (
                 panicAlertsQuery.data.map((alert: any) => (

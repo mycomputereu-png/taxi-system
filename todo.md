@@ -373,3 +373,9 @@
 - [ ] Fix real-time driver status updates - dispatcher should see status changes without page refresh
 - [ ] Add Socket.IO event for driver status changes
 - [ ] Update Dispatcher to listen for driver:status event
+
+## UI Updates - Button Renaming
+- [x] Rename "Așteptare" button to "Curse" in Dispatcher
+- [x] Rename "Urgență" button to "SOS" in Dispatcher
+- [x] Verify button styling and colors remain intact
+- [x] Test all filter functionality with new labels
