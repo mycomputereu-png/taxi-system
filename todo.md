@@ -381,8 +381,9 @@
 - [x] Test all filter functionality with new labels
 
 ## UI Updates - Client Profile Modal Restructuring
-- [x] Remove separate "Evaluări Primite" and "Istoric Curse" tabs
-- [x] Combine into single "Istoric Curse" view
+- [x] Remove separate "Evaluări Primite" and "Istoric Curse" tabs from Dispatcher modal
+- [x] Combine into single "Istoric Curse" view in modal
 - [x] Display ratings inline with each ride in history
 - [x] Show rating stars, comment, and driver info for each rated ride
-- [x] Test profile modal displays correctly with inline ratings (6 tests passing)
+- [x] Test modal inline ratings display (7 tests passing)
+- [x] Verify backend returns ride info with ratings for inline display

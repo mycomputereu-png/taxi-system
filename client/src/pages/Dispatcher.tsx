@@ -1002,64 +1002,7 @@ export default function Dispatcher() {
                   </div>
                 </div>
 
-                {/* Ratings */}
-                {clientProfileQuery.data.totalRatings > 0 && (
-                  <div>
-                    <div className="flex items-center justify-between mb-2">
-                      <h3 className="text-sm font-semibold text-gray-300 flex items-center gap-1">
-                        <Star className="w-4 h-4" />
-                        Evaluări Primite ({clientProfileQuery.data.totalRatings})
-                      </h3>
-                      <select
-                        value={ratingsSortBy}
-                        onChange={(e) => setRatingsSortBy(e.target.value as any)}
-                        className="text-xs bg-gray-800 border border-gray-700 text-gray-300 rounded px-2 py-1"
-                      >
-                        <option value="newest">Cea mai nouă</option>
-                        <option value="oldest">Cea mai veche</option>
-                        <option value="highest">Rating cel mai înalt</option>
-                        <option value="lowest">Rating cel mai scăzut</option>
-                      </select>
-                    </div>
-                    <div className="space-y-2 max-h-48 overflow-y-auto">
-                      {clientProfileQuery.data.ratingsReceived
-                        .sort((a, b) => {
-                          if (ratingsSortBy === "newest") return new Date(b.rating.createdAt).getTime() - new Date(a.rating.createdAt).getTime();
-                          if (ratingsSortBy === "oldest") return new Date(a.rating.createdAt).getTime() - new Date(b.rating.createdAt).getTime();
-                          if (ratingsSortBy === "highest") return b.rating.rating - a.rating.rating;
-                          if (ratingsSortBy === "lowest") return a.rating.rating - b.rating.rating;
-                          return 0;
-                        })
-                        .map((item, idx) => (
-                        <div key={idx} className="border border-gray-700 rounded-lg p-2 bg-gray-800">
-                          <div className="flex items-start justify-between mb-1">
-                            <div className="flex gap-0.5">
-                              {[1, 2, 3, 4, 5].map((star) => (
-                                <span
-                                  key={star}
-                                  className={`text-sm ${
-                                    star <= item.rating.rating ? "text-yellow-400" : "text-gray-600"
-                                  }`}
-                                >
-                                  ★
-                                </span>
-                              ))}
-                            </div>
-                            <span className="text-gray-500 text-xs">
-                              {new Date(item.rating.createdAt).toLocaleDateString("ro-RO")}
-                            </span>
-                          </div>
-                          {item.driver && (
-                            <p className="text-gray-400 text-xs mb-1">De la: <span className="text-white">{item.driver.name}</span></p>
-                          )}
-                          {item.rating.comment && (
-                            <p className="text-gray-300 text-xs">{item.rating.comment}</p>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
+
 
                 {/* Ride History */}
                 <div>
@@ -1118,6 +1061,32 @@ export default function Dispatcher() {
                               <MapPin className="w-3 h-3 flex-shrink-0 mt-0.5" />
                               {item.ride.clientAddress}
                             </p>
+                          )}
+                          
+                          {/* Inline Rating if exists */}
+                          {clientProfileQuery.data.ratingsReceived.find((r: any) => r.ride && r.ride.id === item.ride.id) && (
+                            <div className="mt-2 pt-2 border-t border-gray-700">
+                              <div className="bg-gray-900 rounded p-2">
+                                {(() => {
+                                  const rideRating = clientProfileQuery.data.ratingsReceived.find((r: any) => r.ride && r.ride.id === item.ride.id);
+                                  if (!rideRating) return null;
+                                  return (
+                                    <>
+                                      <div className="flex items-start justify-between mb-1">
+                                        <div className="flex gap-0.5">
+                                          {[1, 2, 3, 4, 5].map((star) => (
+                                            <span key={star} className={`text-xs ${star <= rideRating.rating.rating ? "text-yellow-400" : "text-gray-600"}`}>★</span>
+                                          ))}
+                                        </div>
+                                        <span className="text-gray-500 text-xs">{new Date(rideRating.rating.createdAt).toLocaleDateString("ro-RO")}</span>
+                                      </div>
+                                      {rideRating.driver && <p className="text-gray-400 text-xs mb-1">De la: <span className="text-white">{rideRating.driver.name}</span></p>}
+                                      {rideRating.rating.comment && <p className="text-gray-300 text-xs italic">\"{rideRating.rating.comment}\"</p>}
+                                    </>
+                                  );
+                                })()}
+                              </div>
+                            </div>
                           )}
                         </div>
                       ))
