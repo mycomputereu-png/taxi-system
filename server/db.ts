@@ -533,7 +533,7 @@ export async function getAllClientsWithRatings() {
   const result = await db
     .select({
       client: clients,
-      avgRating: sql<number>`AVG(${clientRatings.rating})`,
+      avgRating: sql<number>`COALESCE(AVG(${clientRatings.rating}), 0)`,
       ratingCount: sql<number>`COUNT(DISTINCT ${clientRatings.id})`,
       rideCount: sql<number>`COUNT(DISTINCT ${rides.id})`,
     })

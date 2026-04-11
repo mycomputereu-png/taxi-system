@@ -104,7 +104,17 @@ export default function Dispatcher() {
     refetchInterval: 5000,
   });
   const historyQuery = trpc.dispatcher.getRideHistory.useQuery(undefined, { enabled: isAuthenticated });
-  const clientsQuery = trpc.dispatcher.getAllClientsWithRatings.useQuery(undefined, { enabled: isAuthenticated });
+  const clientsQuery = trpc.dispatcher.getAllClientsWithRatings.useQuery();
+  
+  // Debug logging
+  if (clientsQuery.data) {
+    console.log("Clients data:", clientsQuery.data.slice(0, 3).map(item => ({
+      phone: item.client.phone,
+      rideCount: item.rideCount,
+      avgRating: item.avgRating,
+      ratingCount: item.ratingCount,
+    })));
+  }
   const panicAlertsQuery = trpc.panic.getActivePanicAlerts.useQuery(undefined, {
     enabled: isAuthenticated,
     refetchInterval: 5000,
@@ -844,10 +854,10 @@ export default function Dispatcher() {
                                 <p className="text-white font-semibold">{item.rideCount || 0}</p>
                               </div>
                               <div className="bg-gray-900 rounded p-1.5">
-                                {typeof item.avgRating === 'number' && item.avgRating > 0 ? (
+                                {item.avgRating && item.avgRating > 0 ? (
                                   <>
                                     <p className="text-gray-400">Rating</p>
-                                    <p className="text-yellow-400 font-semibold">★ {item.avgRating.toFixed(1)}</p>
+                                    <p className="text-yellow-400 font-semibold">★ {Number(item.avgRating).toFixed(1)}</p>
                                   </>
                                 ) : (
                                   <>

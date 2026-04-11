@@ -397,5 +397,6 @@
 
 ## Bug Fixes - Clients List Stats Display
 - [x] Fix rideCount not being returned from backend getAllClientsWithRatings query
-- [x] Ensure avgRating is correctly calculated and returned
+- [x] Ensure avgRating is correctly calculated and returned (using COALESCE to return 0 instead of null)
+- [x] Simplify frontend condition to properly display avgRating when > 0
 - [x] Verify client cards display correct ride count and rating (8 tests passing)
