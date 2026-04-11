@@ -108,6 +108,12 @@ export const appRouter = router({
         const driver = await getDriverByToken(input.token);
         if (!driver) throw new TRPCError({ code: "UNAUTHORIZED" });
         await updateDriverStatus(driver.id, input.status);
+        // Emit status change to dispatcher
+        emitToDispatchers("driver:status", {
+          driverId: driver.id,
+          status: input.status,
+          timestamp: Date.now(),
+        });
         return { success: true };
       }),
 

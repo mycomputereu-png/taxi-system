@@ -192,6 +192,17 @@ export default function Dispatcher() {
     });
 
     const unsubDriverStatus = on("driver:status", (data: { driverId: number; status: string }) => {
+      console.log("[Dispatcher] driver:status event received:", data);
+      // Update driver locations map with new status
+      setDriverLocations((prev) => {
+        const next = new Map(prev);
+        const existing = next.get(data.driverId);
+        if (existing) {
+          next.set(data.driverId, { ...existing, status: data.status });
+        }
+        return next;
+      });
+      // Also invalidate drivers query to update the list
       utils.dispatcher.getDrivers.invalidate();
     });
 
