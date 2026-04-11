@@ -387,3 +387,9 @@
 - [x] Show rating stars, comment, and driver info for each rated ride
 - [x] Test modal inline ratings display (7 tests passing)
 - [x] Verify backend returns ride info with ratings for inline display
+
+## UI Updates - Dispatcher Clients List Layout
+- [x] Add max-height and scroll to clients list in left panel
+- [x] Display client rating in card
+- [x] Display number of rides in card
+- [x] Test scrolling and layout on different screen sizes

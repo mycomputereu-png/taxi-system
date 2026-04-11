@@ -823,47 +823,51 @@ export default function Dispatcher() {
             </TabsContent>
 
             {/* Clients Tab */}
-            <TabsContent value="clients" className="flex-1 overflow-y-auto px-3 pb-3 mt-0">
-              <h3 className="text-sm font-semibold text-gray-300 mb-3">Clienți și rating-uri</h3>
-              {clientsQuery.data && clientsQuery.data.length > 0 ? (
-                clientsQuery.data.map((item: any) => (
-                  <Card
-                    key={item.client.id}
-                    className="mb-2 bg-gray-800 border-gray-700 cursor-pointer hover:bg-gray-750 hover:border-gray-600 transition-colors"
-                    onClick={() => setSelectedClientId(item.client.id)}
-                  >
-                    <CardContent className="p-3">
-                      <div className="flex items-start justify-between">
-                        <div className="flex-1">
-                          <p className="text-white text-sm font-medium">{item.client.name || item.client.phone}</p>
-                          <p className="text-gray-400 text-xs">Tel: {item.client.phone}</p>
-                          <div className="flex items-center gap-1 mt-1">
-                            {typeof item.avgRating === 'number' && item.avgRating > 0 ? (
-                              <>
-                                <span className="text-yellow-400 text-sm">★ {item.avgRating.toFixed(1)}</span>
-                                <span className="text-gray-500 text-xs">({item.ratingCount} rating-uri)</span>
-                              </>
-                            ) : (
-                              <span className="text-gray-500 text-xs">Fără rating-uri</span>
-                            )}
+            <TabsContent value="clients" className="flex-1 overflow-hidden flex flex-col mt-0">
+              <h3 className="text-sm font-semibold text-gray-300 mb-3 px-3 pt-3 flex-shrink-0">Clienți și rating-uri</h3>
+              <div className="flex-1 overflow-y-auto px-3 pb-3">
+                {clientsQuery.data && clientsQuery.data.length > 0 ? (
+                  clientsQuery.data.map((item: any) => (
+                    <Card
+                      key={item.client.id}
+                      className="mb-2 bg-gray-800 border-gray-700 cursor-pointer hover:bg-gray-750 hover:border-gray-600 transition-colors"
+                      onClick={() => setSelectedClientId(item.client.id)}
+                    >
+                      <CardContent className="p-3">
+                        <div className="flex items-start justify-between">
+                          <div className="flex-1">
+                            <p className="text-white text-sm font-medium mb-1">{item.client.name || item.client.phone}</p>
+                            <p className="text-gray-400 text-xs mb-2">Tel: {item.client.phone}</p>
+                            <div className="grid grid-cols-2 gap-2 text-xs">
+                              <div className="bg-gray-900 rounded p-1.5">
+                                <p className="text-gray-400">Curse</p>
+                                <p className="text-white font-semibold">{item.rideCount || 0}</p>
+                              </div>
+                              <div className="bg-gray-900 rounded p-1.5">
+                                {typeof item.avgRating === 'number' && item.avgRating > 0 ? (
+                                  <>
+                                    <p className="text-gray-400">Rating</p>
+                                    <p className="text-yellow-400 font-semibold">★ {item.avgRating.toFixed(1)}</p>
+                                  </>
+                                ) : (
+                                  <>
+                                    <p className="text-gray-400">Rating</p>
+                                    <p className="text-gray-500 text-xs">N/A</p>
+                                  </>
+                                )}
+                              </div>
+                            </div>
                           </div>
                         </div>
-                        <Badge className={`text-xs ${
-                          typeof item.avgRating === 'number' && item.avgRating >= 4 ? "bg-green-700" :
-                          typeof item.avgRating === 'number' && item.avgRating >= 3 ? "bg-yellow-700" :
-                          typeof item.avgRating === 'number' ? "bg-red-700" : "bg-gray-700"
-                        }`}>
-                          {typeof item.avgRating === 'number' ? item.avgRating.toFixed(1) : "N/A"}
-                        </Badge>
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))
-              ) : (
-                <div className="text-center py-4 text-gray-400">
-                  <p>Niciun client</p>
-                </div>
-              )}
+                      </CardContent>
+                    </Card>
+                  ))
+                ) : (
+                  <div className="text-center py-4 text-gray-400">
+                    <p>Niciun client</p>
+                  </div>
+                )}
+              </div>
             </TabsContent>
 
             {/* Panic Alerts Tab */}
