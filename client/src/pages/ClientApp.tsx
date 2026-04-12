@@ -557,7 +557,7 @@ export default function ClientApp() {
             <p className="text-gray-400 text-sm">Autentificare cu număr de telefon</p>
           </CardHeader>
           <CardContent className="flex flex-col gap-4">
-            {!otpSent ? (
+            {!otpSent && !tempToken ? (
               <>
                 <div className="relative">
                   <Phone className="absolute left-3 top-3 w-4 h-4 text-gray-400" />
@@ -583,7 +583,7 @@ export default function ClientApp() {
                   {sendOtpMut.isPending ? "Se trimite..." : "Trimite Cod OTP"}
                 </Button>
               </>
-            ) : tempToken && !nameSubmitted ? (
+            ) : tempToken ? (
               // Name input screen
               <>
                 <p className="text-gray-400 text-sm text-center mb-4">

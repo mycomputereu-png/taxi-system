@@ -410,3 +410,10 @@
 - [x] Save session after name is submitted
 - [x] Dispatcher already displays client name (name || phone)
 - [x] Test name display in all sections (8 tests passing)
+
+
+## Bug Fixes - Client Name Input Screen
+- [x] Fix name input screen not appearing after OTP verification
+- [x] Verify tempToken state is set correctly
+- [x] Check conditional logic for showing name input screen
+- [x] Test name input appears and works correctly (8 tests passing)
