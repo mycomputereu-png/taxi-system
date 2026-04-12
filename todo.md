@@ -400,3 +400,13 @@
 - [x] Ensure avgRating is correctly calculated and returned (using COALESCE to return 0 instead of null)
 - [x] Simplify frontend condition to properly display avgRating when > 0
 - [x] Verify client cards display correct ride count and rating (8 tests passing)
+
+
+## Feature - Client Name Field
+- [x] Add name column to clients table in database schema (already exists)
+- [x] Add updateClientName procedure to clientApp router
+- [x] Update Client app to include name input screen after OTP verification
+- [x] Display name input dialog with User icon
+- [x] Save session after name is submitted
+- [x] Dispatcher already displays client name (name || phone)
+- [x] Test name display in all sections (8 tests passing)

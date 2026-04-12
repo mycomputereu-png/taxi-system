@@ -70,6 +70,22 @@ export const appRouter = router({
       ctx.res.clearCookie("session", { ...cookieOptions, maxAge: -1 });
       return { success: true } as const;
     }),
+    updateClientName: publicProcedure
+      .input(z.object({ token: z.string(), name: z.string() }))
+      .mutation(async ({ input }) => {
+        const client = await getClientByToken(input.token);
+        if (!client) throw new TRPCError({ code: "UNAUTHORIZED" });
+        const db = await import("./db").then((m) => m.getDb());
+        if (db) {
+          const { clients } = await import("../drizzle/schema");
+          const { eq } = await import("drizzle-orm");
+          await db
+            .update(clients)
+            .set({ name: input.name })
+            .where(eq(clients.id, client.id));
+        }
+        return { success: true };
+      }),
   }),
 
   // ─── Driver Auth ────────────────────────────────────────────────────────────
@@ -260,6 +276,22 @@ export const appRouter = router({
         });
         return { success: true };
       }),
+    updateClientName: publicProcedure
+      .input(z.object({ token: z.string(), name: z.string() }))
+      .mutation(async ({ input }) => {
+        const client = await getClientByToken(input.token);
+        if (!client) throw new TRPCError({ code: "UNAUTHORIZED" });
+        const db = await import("./db").then((m) => m.getDb());
+        if (db) {
+          const { clients } = await import("../drizzle/schema");
+          const { eq } = await import("drizzle-orm");
+          await db
+            .update(clients)
+            .set({ name: input.name })
+            .where(eq(clients.id, client.id));
+        }
+        return { success: true };
+      }),
   }),
 
   // ─── Client Auth ────────────────────────────────────────────────────────────
@@ -407,6 +439,22 @@ export const appRouter = router({
         if (ride.driverId) emitToDriver(ride.driverId, "ride:cancelled", { rideId: ride.id });
         return { success: true };
       }),
+    updateClientName: publicProcedure
+      .input(z.object({ token: z.string(), name: z.string() }))
+      .mutation(async ({ input }) => {
+        const client = await getClientByToken(input.token);
+        if (!client) throw new TRPCError({ code: "UNAUTHORIZED" });
+        const db = await import("./db").then((m) => m.getDb());
+        if (db) {
+          const { clients } = await import("../drizzle/schema");
+          const { eq } = await import("drizzle-orm");
+          await db
+            .update(clients)
+            .set({ name: input.name })
+            .where(eq(clients.id, client.id));
+        }
+        return { success: true };
+      }),
   }),
 
   // ─── Dispatcher ──────────────────────────────────────────────────────────────
@@ -552,6 +600,22 @@ export const appRouter = router({
         const { getDriverStatistics } = await import("./db");
         return getDriverStatistics(input.driverId, input.startDate, input.endDate);
       }),
+    updateClientName: publicProcedure
+      .input(z.object({ token: z.string(), name: z.string() }))
+      .mutation(async ({ input }) => {
+        const client = await getClientByToken(input.token);
+        if (!client) throw new TRPCError({ code: "UNAUTHORIZED" });
+        const db = await import("./db").then((m) => m.getDb());
+        if (db) {
+          const { clients } = await import("../drizzle/schema");
+          const { eq } = await import("drizzle-orm");
+          await db
+            .update(clients)
+            .set({ name: input.name })
+            .where(eq(clients.id, client.id));
+        }
+        return { success: true };
+      }),
   }),
 
   // ─── Panic Alerts ──────────────────────────────────────────────────────────
@@ -632,6 +696,22 @@ export const appRouter = router({
       .input(z.object({ driverId: z.number() }))
       .query(async ({ input }) => {
         return getPanicAlertsByDriver(input.driverId);
+      }),
+    updateClientName: publicProcedure
+      .input(z.object({ token: z.string(), name: z.string() }))
+      .mutation(async ({ input }) => {
+        const client = await getClientByToken(input.token);
+        if (!client) throw new TRPCError({ code: "UNAUTHORIZED" });
+        const db = await import("./db").then((m) => m.getDb());
+        if (db) {
+          const { clients } = await import("../drizzle/schema");
+          const { eq } = await import("drizzle-orm");
+          await db
+            .update(clients)
+            .set({ name: input.name })
+            .where(eq(clients.id, client.id));
+        }
+        return { success: true };
       }),
   }),
 });

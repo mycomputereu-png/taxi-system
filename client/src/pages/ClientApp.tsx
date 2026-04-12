@@ -85,6 +85,9 @@ export default function ClientApp() {
   const [otp, setOtp] = useState("");
   const [otpSent, setOtpSent] = useState(false);
   const [devOtp, setDevOtp] = useState<string | null>(null);
+  const [name, setName] = useState("");
+  const [nameSubmitted, setNameSubmitted] = useState(false);
+  const [tempToken, setTempToken] = useState<string | null>(null);
 
   // Ride state
   const [rideStatus, setRideStatus] = useState<RideStatus>("idle");
@@ -123,11 +126,23 @@ export default function ClientApp() {
 
   const verifyOtpMut = trpc.clientApp.verifyOtp.useMutation({
     onSuccess: (data) => {
-      const s: ClientSession = { token: data.token, clientId: data.client.id, phone: data.client.phone };
-      saveSession(s);
-      setSession(s);
-      // auth:client will be emitted by useEffect when session changes
+      setTempToken(data.token);
+      setNameSubmitted(false);
+      setName("");
       toast.success("Autentificat cu succes!");
+    },
+    onError: (e) => toast.error(e.message),
+  });
+  const updateNameMut = trpc.clientApp.updateClientName.useMutation({
+    onSuccess: () => {
+      if (tempToken) {
+        const s: ClientSession = { token: tempToken, clientId: 0, phone };
+        saveSession(s);
+        setSession(s);
+      }
+      setNameSubmitted(true);
+      setTempToken(null);
+      toast.success("Nume salvat cu succes!");
     },
     onError: (e) => toast.error(e.message),
   });
@@ -566,6 +581,35 @@ export default function ClientApp() {
                   disabled={sendOtpMut.isPending || phone.length < 10}
                 >
                   {sendOtpMut.isPending ? "Se trimite..." : "Trimite Cod OTP"}
+                </Button>
+              </>
+            ) : tempToken && !nameSubmitted ? (
+              // Name input screen
+              <>
+                <p className="text-gray-400 text-sm text-center mb-4">
+                  Bun venit! Introdu-ți numele
+                </p>
+                <div className="relative">
+                  <User className="absolute left-3 top-3 w-4 h-4 text-gray-400" />
+                  <Input
+                    placeholder="Introdu-ți numele"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    className="bg-gray-800 border-gray-600 text-white pl-10"
+                  />
+                </div>
+                <Button
+                  className="w-full bg-yellow-500 hover:bg-yellow-600 text-black font-bold text-lg py-6"
+                  onClick={() => {
+                    if (name.trim().length < 2) {
+                      toast.error("Introdu un nume valid");
+                      return;
+                    }
+                    if (tempToken) updateNameMut.mutate({ token: tempToken, name: name.trim() });
+                  }}
+                  disabled={updateNameMut.isPending || name.trim().length < 2}
+                >
+                  {updateNameMut.isPending ? "Se salvează..." : "Continuă"}
                 </Button>
               </>
             ) : (
