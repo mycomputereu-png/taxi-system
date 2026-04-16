@@ -1,0 +1,62 @@
+{
+  "version": "7",
+  "dialect": "mysql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "5",
+      "when": 1775174453732,
+      "tag": "0000_round_freak",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "5",
+      "when": 1775174601944,
+      "tag": "0001_cooing_lord_hawal",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "5",
+      "when": 1775291086031,
+      "tag": "0002_graceful_killmonger",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "5",
+      "when": 1775309701640,
+      "tag": "0003_nice_wendell_rand",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "5",
+      "when": 1775310503180,
+      "tag": "0004_burly_korg",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "5",
+      "when": 1775315356686,
+      "tag": "0005_tiny_mister_fear",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "5",
+      "when": 1775317753242,
+      "tag": "0006_black_kree",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "5",
+      "when": 1775380142686,
+      "tag": "0007_peaceful_hydra",
+      "breakpoints": true
+    }
+  ]
+}
