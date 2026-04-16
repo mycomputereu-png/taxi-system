@@ -1,4 +1,5 @@
 FROM node:20-alpine
+RUN npm install -g pnpm
 
 WORKDIR /app
 
@@ -10,6 +11,6 @@ COPY . .
 
 RUN pnpm build
 
-EXPOSE 3000
+EXPOSE 8080
 
 CMD ["node", "dist/index.js"]
