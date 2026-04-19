@@ -1,5 +1,4 @@
 FROM node:20-alpine as builder
-RUN npm install -g pnpm
 
 WORKDIR /app
 
