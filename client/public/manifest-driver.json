@@ -2,7 +2,7 @@
   "name": "Taxi Bucovina Șofer",
   "short_name": "Taxi Șofer",
   "description": "Acceptă curse și navigheaza la clienți cu GPS live",
-  "start_url": "/driver",
+  "start_url": "https://driver.taxisystem-fapkkap3.manus.space/",
   "scope": "/",
   "display": "standalone",
   "orientation": "portrait-primary",
@@ -36,7 +36,7 @@
       "name": "Acceptă Curse",
       "short_name": "Curse",
       "description": "Vezi și acceptă curse disponibile",
-      "url": "/driver?action=rides",
+      "url": "https://driver.taxisystem-fapkkap3.manus.space/?action=rides",
       "icons": [
         {
           "src": "/taxi-bucovina-driver-icon-512.png",

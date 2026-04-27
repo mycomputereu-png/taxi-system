@@ -2,7 +2,7 @@
   "name": "Taxi Bucovina Dispatcher",
   "short_name": "Dispatcher",
   "description": "Gestionează curse, șoferi și clienți în timp real",
-  "start_url": "/dispatcher",
+  "start_url": "https://dispatcher.taxisystem-fapkkap3.manus.space/",
   "scope": "/",
   "display": "standalone",
   "orientation": "landscape-primary",
@@ -36,7 +36,7 @@
       "name": "Curse Active",
       "short_name": "Curse",
       "description": "Vezi curse în așteptare",
-      "url": "/dispatcher?tab=rides",
+      "url": "https://dispatcher.taxisystem-fapkkap3.manus.space/?tab=rides",
       "icons": [
         {
           "src": "/taxi-bucovina-dispatcher-icon-512.png",
@@ -48,7 +48,7 @@
       "name": "Șoferi Online",
       "short_name": "Șoferi",
       "description": "Gestionează șoferii disponibili",
-      "url": "/dispatcher?tab=drivers",
+      "url": "https://dispatcher.taxisystem-fapkkap3.manus.space/?tab=drivers",
       "icons": [
         {
           "src": "/taxi-bucovina-dispatcher-icon-512.png",

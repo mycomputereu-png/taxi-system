@@ -2,7 +2,7 @@
   "name": "Taxi Bucovina",
   "short_name": "Taxi Bucovina",
   "description": "Cheamă taxi cu un click și urmărește șoferul live",
-  "start_url": "/client",
+  "start_url": "https://client.taxisystem-fapkkap3.manus.space/",
   "scope": "/",
   "display": "standalone",
   "orientation": "portrait-primary",
@@ -36,7 +36,7 @@
       "name": "Cheamă Taxi",
       "short_name": "Cheamă",
       "description": "Cheamă rapid un taxi",
-      "url": "/client?action=call",
+      "url": "https://client.taxisystem-fapkkap3.manus.space/?action=call",
       "icons": [
         {
           "src": "/taxi-bucovina-client-icon-512.png",
