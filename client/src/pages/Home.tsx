@@ -1,10 +1,79 @@
 import { useLocation } from "wouter";
+import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Car, Users, Radio } from "lucide-react";
+import { Car, Users, Radio, Download } from "lucide-react";
+
+interface BeforeInstallPromptEvent extends Event {
+  prompt: () => Promise<void>;
+  userChoice: Promise<{ outcome: "accepted" | "dismissed" }>;
+}
 
 export default function Home() {
   const [, navigate] = useLocation();
+  const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(null);
+  const [canInstall, setCanInstall] = useState(false);
+
+  useEffect(() => {
+    const handler = (e: Event) => {
+      e.preventDefault();
+      setDeferredPrompt(e as BeforeInstallPromptEvent);
+      setCanInstall(true);
+    };
+
+    window.addEventListener("beforeinstallprompt", handler);
+    return () => window.removeEventListener("beforeinstallprompt", handler);
+  }, []);
+
+  const handleInstallApp = async (appName: string) => {
+    if (!deferredPrompt) return;
+
+    deferredPrompt.prompt();
+    const { outcome } = await deferredPrompt.userChoice;
+    if (outcome === "accepted") {
+      setDeferredPrompt(null);
+      setCanInstall(false);
+    }
+  };
+
+  const apps = [
+    {
+      name: "Dispatcher",
+      icon: Radio,
+      color: "yellow",
+      borderColor: "border-yellow-800 hover:border-yellow-500",
+      shadowColor: "hover:shadow-yellow-900/30",
+      bgColor: "bg-yellow-500",
+      buttonColor: "bg-yellow-500 hover:bg-yellow-600",
+      textColor: "text-black",
+      path: "/dispatcher",
+      description: "Gestionează curse, șoferi și asignează în timp real",
+    },
+    {
+      name: "Client",
+      icon: Users,
+      color: "blue",
+      borderColor: "border-blue-800 hover:border-blue-500",
+      shadowColor: "hover:shadow-blue-900/30",
+      bgColor: "bg-blue-600",
+      buttonColor: "bg-blue-600 hover:bg-blue-700",
+      textColor: "text-white",
+      path: "/client",
+      description: "Cheamă taxi cu un click și urmărește șoferul live",
+    },
+    {
+      name: "Șofer",
+      icon: Car,
+      color: "green",
+      borderColor: "border-green-800 hover:border-green-500",
+      shadowColor: "hover:shadow-green-900/30",
+      bgColor: "bg-green-600",
+      buttonColor: "bg-green-600 hover:bg-green-700",
+      textColor: "text-white",
+      path: "/driver",
+      description: "Acceptă curse și navighează la client cu GPS live",
+    },
+  ];
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-950 via-gray-900 to-gray-950 flex flex-col items-center justify-center p-6">
@@ -18,73 +87,50 @@ export default function Home() {
       </div>
 
       {/* App Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 w-full max-w-3xl">
-        {/* Dispatcher */}
-        <Card
-          className="bg-gray-900 border-yellow-800 hover:border-yellow-500 cursor-pointer transition-all hover:scale-105 hover:shadow-2xl hover:shadow-yellow-900/30"
-          onClick={() => navigate("/dispatcher")}
-        >
-          <CardContent className="p-6 flex flex-col items-center text-center gap-4">
-            <div className="w-16 h-16 bg-yellow-500 rounded-2xl flex items-center justify-center">
-              <Radio className="w-8 h-8 text-black" />
-            </div>
-            <div>
-              <h2 className="text-white font-bold text-xl mb-1">Dispatcher</h2>
-              <p className="text-gray-400 text-sm">
-                Gestionează curse, șoferi și asignează în timp real
-              </p>
-            </div>
-            <Button className="w-full bg-yellow-500 hover:bg-yellow-600 text-black font-bold">
-              Deschide
-            </Button>
-          </CardContent>
-        </Card>
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 w-full max-w-4xl">
+        {apps.map((app) => {
+          const IconComponent = app.icon;
+          return (
+            <Card
+              key={app.name}
+              className={`bg-gray-900 ${app.borderColor} cursor-pointer transition-all hover:scale-105 hover:shadow-2xl ${app.shadowColor}`}
+            >
+              <CardContent className="p-6 flex flex-col items-center text-center gap-4">
+                <div className={`w-16 h-16 ${app.bgColor} rounded-2xl flex items-center justify-center`}>
+                  <IconComponent className={`w-8 h-8 ${app.textColor}`} />
+                </div>
+                <div>
+                  <h2 className="text-white font-bold text-xl mb-1">{app.name}</h2>
+                  <p className="text-gray-400 text-sm">{app.description}</p>
+                </div>
 
-        {/* Client */}
-        <Card
-          className="bg-gray-900 border-blue-800 hover:border-blue-500 cursor-pointer transition-all hover:scale-105 hover:shadow-2xl hover:shadow-blue-900/30"
-          onClick={() => navigate("/client")}
-        >
-          <CardContent className="p-6 flex flex-col items-center text-center gap-4">
-            <div className="w-16 h-16 bg-blue-600 rounded-2xl flex items-center justify-center">
-              <Users className="w-8 h-8 text-white" />
-            </div>
-            <div>
-              <h2 className="text-white font-bold text-xl mb-1">Client</h2>
-              <p className="text-gray-400 text-sm">
-                Cheamă taxi cu un click și urmărește șoferul live
-              </p>
-            </div>
-            <Button className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold">
-              Deschide
-            </Button>
-          </CardContent>
-        </Card>
-
-        {/* Driver */}
-        <Card
-          className="bg-gray-900 border-green-800 hover:border-green-500 cursor-pointer transition-all hover:scale-105 hover:shadow-2xl hover:shadow-green-900/30"
-          onClick={() => navigate("/driver")}
-        >
-          <CardContent className="p-6 flex flex-col items-center text-center gap-4">
-            <div className="w-16 h-16 bg-green-600 rounded-2xl flex items-center justify-center">
-              <Car className="w-8 h-8 text-white" />
-            </div>
-            <div>
-              <h2 className="text-white font-bold text-xl mb-1">Șofer</h2>
-              <p className="text-gray-400 text-sm">
-                Acceptă curse și navighează la client cu GPS live
-              </p>
-            </div>
-            <Button className="w-full bg-green-600 hover:bg-green-700 text-white font-bold">
-              Deschide
-            </Button>
-          </CardContent>
-        </Card>
+                {/* Buttons */}
+                <div className="flex flex-col gap-2 w-full">
+                  <Button
+                    onClick={() => navigate(app.path)}
+                    className={`w-full ${app.buttonColor} ${app.textColor} font-bold`}
+                  >
+                    Deschide
+                  </Button>
+                  {canInstall && (
+                    <Button
+                      onClick={() => handleInstallApp(app.name)}
+                      variant="outline"
+                      className="w-full border-gray-700 text-gray-300 hover:text-white hover:border-gray-500"
+                    >
+                      <Download className="w-4 h-4 mr-2" />
+                      Instalează
+                    </Button>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          );
+        })}
       </div>
 
       {/* Features */}
-      <div className="mt-12 grid grid-cols-2 md:grid-cols-4 gap-4 w-full max-w-3xl text-center">
+      <div className="mt-12 grid grid-cols-2 md:grid-cols-4 gap-4 w-full max-w-4xl text-center">
         {[
           { icon: "📍", label: "GPS în timp real" },
           { icon: "🗺️", label: "Google Maps" },

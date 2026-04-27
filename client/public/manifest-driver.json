@@ -1,0 +1,48 @@
+{
+  "name": "Taxi Bucovina Șofer",
+  "short_name": "Taxi Șofer",
+  "description": "Acceptă curse și navigheaza la clienți cu GPS live",
+  "start_url": "/driver",
+  "scope": "/driver",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#0f172a",
+  "theme_color": "#dc2626",
+  "icons": [
+    {
+      "src": "/taxi-bucovina-driver-icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/taxi-bucovina-driver-icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "screenshots": [
+    {
+      "src": "/taxi-bucovina-driver-splash.png",
+      "sizes": "540x720",
+      "type": "image/png",
+      "form_factor": "narrow"
+    }
+  ],
+  "categories": ["transportation"],
+  "shortcuts": [
+    {
+      "name": "Acceptă Curse",
+      "short_name": "Curse",
+      "description": "Vezi și acceptă curse disponibile",
+      "url": "/driver?action=rides",
+      "icons": [
+        {
+          "src": "/taxi-bucovina-driver-icon-512.png",
+          "sizes": "192x192"
+        }
+      ]
+    }
+  ]
+}

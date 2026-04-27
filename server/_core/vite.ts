@@ -6,6 +6,27 @@ import path from "path";
 import { createServer as createViteServer } from "vite";
 import viteConfig from "../../vite.config";
 
+// Subdomain routing helper
+function getSubdomain(req: any): string | null {
+  const host = req.get('host') || '';
+  const parts = host.split('.');
+  
+  // For localhost:3000 or 127.0.0.1:3000
+  if (parts.length <= 2 || host.includes('localhost') || host.includes('127.0.0.1')) {
+    return null;
+  }
+  
+  // Extract subdomain (first part before first dot)
+  const subdomain = parts[0];
+  
+  // Check if it's a valid subdomain (not the main domain)
+  if (['client', 'driver', 'dispatcher'].includes(subdomain)) {
+    return subdomain;
+  }
+  
+  return null;
+}
+
 export async function setupVite(app: Express, server: Server) {
   const serverOptions = {
     middlewareMode: true,
@@ -21,8 +42,16 @@ export async function setupVite(app: Express, server: Server) {
   });
 
   app.use(vite.middlewares);
+  
+  // Add subdomain detection to request
+  app.use((req, res, next) => {
+    (req as any).subdomain = getSubdomain(req);
+    next();
+  });
+  
   app.use("*", async (req, res, next) => {
     const url = req.originalUrl;
+    const subdomain = (req as any).subdomain;
 
     try {
       const clientTemplate = path.resolve(
@@ -57,6 +86,34 @@ export function serveStatic(app: Express) {
       `Could not find the build directory: ${distPath}, make sure to build the client first`
     );
   }
+
+  // Add subdomain detection to request
+  app.use((req, res, next) => {
+    (req as any).subdomain = getSubdomain(req);
+    next();
+  });
+
+  // Serve subdomain-specific manifest.json
+  app.get("/manifest.json", (req, res) => {
+    const subdomain = (req as any).subdomain;
+    let manifestFile = "manifest.json";
+    
+    if (subdomain === "client") {
+      manifestFile = "manifest-client.json";
+    } else if (subdomain === "driver") {
+      manifestFile = "manifest-driver.json";
+    } else if (subdomain === "dispatcher") {
+      manifestFile = "manifest-dispatcher.json";
+    }
+    
+    const manifestPath = path.resolve(distPath, manifestFile);
+    if (fs.existsSync(manifestPath)) {
+      res.setHeader("Content-Type", "application/manifest+json");
+      res.sendFile(manifestPath);
+    } else {
+      res.status(404).json({ error: "Manifest not found" });
+    }
+  });
 
   app.use(express.static(distPath));
 

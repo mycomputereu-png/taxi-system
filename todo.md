@@ -417,3 +417,28 @@
 - [x] Verify tempToken state is set correctly
 - [x] Check conditional logic for showing name input screen
 - [x] Test name input appears and works correctly (8 tests passing)
+
+
+## Feature - Multi-App PWA with Subdomains
+- [ ] Create landing page with 3 app cards (Client, Driver, Dispatcher)
+- [ ] Add DESCHIDE button (opens app) for each card
+- [ ] Add INSTALEAZA button (installs PWA) for each card
+- [ ] Configure routing based on subdomain (client.*, driver.*, dispatcher.*)
+- [ ] Create separate manifest.json for each app
+- [ ] Create separate service workers for each app
+- [ ] Configure Manus subdomains
+- [ ] Test PWA installation on all 3 apps
+- [ ] Verify each app installs with correct icon and name
+
+
+## 🚀 PWA Multi-App Subdomain Architecture
+- [x] Create manifest-client.json with Client app configuration (start_url: /client, theme_color: #2563eb)
+- [x] Create manifest-driver.json with Driver app configuration (start_url: /driver, theme_color: #dc2626)
+- [x] Create manifest-dispatcher.json with Dispatcher app configuration (start_url: /dispatcher, theme_color: #f59e0b)
+- [x] Implement subdomain detection middleware in server/_core/vite.ts (getSubdomain function)
+- [x] Add manifest.json serving logic based on subdomain detection
+- [x] Create comprehensive test suite for subdomain manifest serving (11 tests passing)
+- [ ] Configure subdomains in Manus Management UI (client.*, driver.*, dispatcher.*)
+- [ ] Verify PWA installation and functionality for each independent subdomain
+- [ ] Test manifest.json serving on deployed subdomains
+- [ ] Configure DNS for taxibucovina.eu with subdomain support

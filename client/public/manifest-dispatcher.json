@@ -1,0 +1,60 @@
+{
+  "name": "Taxi Bucovina Dispatcher",
+  "short_name": "Dispatcher",
+  "description": "Gestionează curse, șoferi și clienți în timp real",
+  "start_url": "/dispatcher",
+  "scope": "/dispatcher",
+  "display": "standalone",
+  "orientation": "landscape-primary",
+  "background_color": "#0f172a",
+  "theme_color": "#f59e0b",
+  "icons": [
+    {
+      "src": "/taxi-bucovina-dispatcher-icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/taxi-bucovina-dispatcher-icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "screenshots": [
+    {
+      "src": "/taxi-bucovina-dispatcher-splash.png",
+      "sizes": "960x720",
+      "type": "image/png",
+      "form_factor": "wide"
+    }
+  ],
+  "categories": ["transportation", "productivity"],
+  "shortcuts": [
+    {
+      "name": "Curse Active",
+      "short_name": "Curse",
+      "description": "Vezi curse în așteptare",
+      "url": "/dispatcher?tab=rides",
+      "icons": [
+        {
+          "src": "/taxi-bucovina-dispatcher-icon-512.png",
+          "sizes": "192x192"
+        }
+      ]
+    },
+    {
+      "name": "Șoferi Online",
+      "short_name": "Șoferi",
+      "description": "Gestionează șoferii disponibili",
+      "url": "/dispatcher?tab=drivers",
+      "icons": [
+        {
+          "src": "/taxi-bucovina-dispatcher-icon-512.png",
+          "sizes": "192x192"
+        }
+      ]
+    }
+  ]
+}

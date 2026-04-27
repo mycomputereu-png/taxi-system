@@ -1,0 +1,48 @@
+{
+  "name": "Taxi Bucovina",
+  "short_name": "Taxi Bucovina",
+  "description": "Cheamă taxi cu un click și urmărește șoferul live",
+  "start_url": "/client",
+  "scope": "/client",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#0f172a",
+  "theme_color": "#2563eb",
+  "icons": [
+    {
+      "src": "/taxi-bucovina-client-icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/taxi-bucovina-client-icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "screenshots": [
+    {
+      "src": "/taxi-bucovina-client-splash.png",
+      "sizes": "540x720",
+      "type": "image/png",
+      "form_factor": "narrow"
+    }
+  ],
+  "categories": ["transportation"],
+  "shortcuts": [
+    {
+      "name": "Cheamă Taxi",
+      "short_name": "Cheamă",
+      "description": "Cheamă rapid un taxi",
+      "url": "/client?action=call",
+      "icons": [
+        {
+          "src": "/taxi-bucovina-client-icon-512.png",
+          "sizes": "192x192"
+        }
+      ]
+    }
+  ]
+}
