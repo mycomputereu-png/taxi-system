@@ -9,15 +9,43 @@ import ClientApp from "./pages/ClientApp";
 import DriverApp from "./pages/DriverApp";
 import { useEffect } from "react";
 
+// Helper function to detect subdomain
+function getSubdomain(): string | null {
+  if (typeof window === "undefined") return null;
+  
+  const hostname = window.location.hostname;
+  const parts = hostname.split(".");
+  
+  // Check if it's a subdomain (not localhost or IP)
+  if (parts.length > 2 && !hostname.includes("localhost")) {
+    const subdomain = parts[0];
+    if (["client", "driver", "dispatcher"].includes(subdomain)) {
+      return subdomain;
+    }
+  }
+  
+  return null;
+}
+
 function Router() {
   const [location, navigate] = useLocation();
 
-  // Redirect to installed app on first load or when accessing home page
+  // Redirect based on subdomain or installed app
   useEffect(() => {
+    const subdomain = getSubdomain();
     const installedApp = localStorage.getItem("installedApp");
     
-    // If on home page and an app is installed, redirect to it
+    // Priority 1: If on a subdomain, redirect to that app's route
+    if (subdomain && location === "/") {
+      console.log(`Subdomain detected: ${subdomain}, redirecting to /${subdomain}`);
+      navigate(`/${subdomain}`);
+      localStorage.setItem("installedApp", subdomain);
+      return;
+    }
+    
+    // Priority 2: If on home page and an app is installed, redirect to it
     if (location === "/" && installedApp) {
+      console.log(`Installed app detected: ${installedApp}, redirecting to /${installedApp}`);
       if (installedApp === "client") {
         navigate("/client");
       } else if (installedApp === "driver") {
@@ -25,15 +53,16 @@ function Router() {
       } else if (installedApp === "dispatcher") {
         navigate("/dispatcher");
       }
+      return;
     }
     
-    // Log when PWA app is launched via start_url
-    if (location === "/client" && installedApp === "client") {
-      console.log("PWA Client app launched correctly");
-    } else if (location === "/driver" && installedApp === "driver") {
-      console.log("PWA Driver app launched correctly");
-    } else if (location === "/dispatcher" && installedApp === "dispatcher") {
-      console.log("PWA Dispatcher app launched correctly");
+    // Log when app is launched via subdomain or PWA
+    if (location === "/client" && (subdomain === "client" || installedApp === "client")) {
+      console.log("Client app launched");
+    } else if (location === "/driver" && (subdomain === "driver" || installedApp === "driver")) {
+      console.log("Driver app launched");
+    } else if (location === "/dispatcher" && (subdomain === "dispatcher" || installedApp === "dispatcher")) {
+      console.log("Dispatcher app launched");
     }
   }, [location, navigate]);
 

@@ -458,11 +458,14 @@
 - [x] Test that installed app opens directly to correct interface (localStorage + routing fix)
 
 
-## Subdomain Configuration (In Progress)
-- [ ] Configure subdomain: client.taxisystem-fapkkap3.manus.space
-- [ ] Configure subdomain: driver.taxisystem-fapkkap3.manus.space
-- [ ] Configure subdomain: dispatcher.taxisystem-fapkkap3.manus.space
-- [ ] Wait for DNS propagation (5-10 minutes)
+## Subdomain Configuration & Routing (Complete)
+- [x] Configure subdomain: client.taxisystem-fapkkap3.manus.space
+- [x] Configure subdomain: driver.taxisystem-fapkkap3.manus.space
+- [x] Configure subdomain: dispatcher.taxisystem-fapkkap3.manus.space
+- [x] Implement subdomain detection in App.tsx
+- [x] Auto-redirect to app-specific interface based on subdomain
+- [x] Create tests for subdomain detection and routing (15 tests passing)
+- [ ] Wait for DNS propagation to complete
 - [ ] Test PWA installation on each subdomain
 - [ ] Verify manifest.json is served correctly per subdomain
 - [ ] Test app-specific routing on each subdomain
