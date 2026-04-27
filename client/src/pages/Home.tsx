@@ -9,10 +9,13 @@ interface BeforeInstallPromptEvent extends Event {
   userChoice: Promise<{ outcome: "accepted" | "dismissed" }>;
 }
 
+type AppType = "client" | "driver" | "dispatcher";
+
 export default function Home() {
   const [, navigate] = useLocation();
   const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(null);
   const [canInstall, setCanInstall] = useState(false);
+  const [pendingInstallApp, setPendingInstallApp] = useState<AppType | null>(null);
 
   useEffect(() => {
     const handler = (e: Event) => {
@@ -22,17 +25,38 @@ export default function Home() {
     };
 
     window.addEventListener("beforeinstallprompt", handler);
-    return () => window.removeEventListener("beforeinstallprompt", handler);
+    
+    // Listen for app installed event
+    const appInstalledHandler = () => {
+      console.log("PWA app installed");
+      setCanInstall(false);
+      setDeferredPrompt(null);
+    };
+    window.addEventListener("appinstalled", appInstalledHandler);
+    
+    return () => {
+      window.removeEventListener("beforeinstallprompt", handler);
+      window.removeEventListener("appinstalled", appInstalledHandler);
+    };
   }, []);
 
-  const handleInstallApp = async (appName: string) => {
+  const handleInstallApp = async (appName: string, appType: AppType) => {
     if (!deferredPrompt) return;
+
+    // Save which app is being installed
+    setPendingInstallApp(appType);
+    localStorage.setItem("installedApp", appType);
 
     deferredPrompt.prompt();
     const { outcome } = await deferredPrompt.userChoice;
     if (outcome === "accepted") {
+      console.log(`${appName} PWA installation accepted`);
       setDeferredPrompt(null);
       setCanInstall(false);
+    } else {
+      // Installation was dismissed, clear the saved app
+      localStorage.removeItem("installedApp");
+      setPendingInstallApp(null);
     }
   };
 
@@ -114,7 +138,7 @@ export default function Home() {
                   </Button>
                   {canInstall && (
                     <Button
-                      onClick={() => handleInstallApp(app.name)}
+                      onClick={() => handleInstallApp(app.name, app.path.slice(1) as AppType)}
                       variant="outline"
                       className="w-full border-gray-700 text-gray-300 hover:text-white hover:border-gray-500"
                     >
