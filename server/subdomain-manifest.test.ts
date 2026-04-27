@@ -187,7 +187,7 @@ describe("Subdomain Manifest Serving", () => {
 
     expect(content.name).toBe("Taxi Bucovina");
     expect(content.start_url).toBe("/client");
-    expect(content.scope).toBe("/client");
+    expect(content.scope).toBe("/");
     expect(content.theme_color).toBe("#2563eb");
   });
 
@@ -204,7 +204,7 @@ describe("Subdomain Manifest Serving", () => {
 
     expect(content.name).toBe("Taxi Bucovina Șofer");
     expect(content.start_url).toBe("/driver");
-    expect(content.scope).toBe("/driver");
+    expect(content.scope).toBe("/");
     expect(content.theme_color).toBe("#dc2626");
   });
 
@@ -221,7 +221,7 @@ describe("Subdomain Manifest Serving", () => {
 
     expect(content.name).toBe("Taxi Bucovina Dispatcher");
     expect(content.start_url).toBe("/dispatcher");
-    expect(content.scope).toBe("/dispatcher");
+    expect(content.scope).toBe("/");
     expect(content.theme_color).toBe("#f59e0b");
   });
 });

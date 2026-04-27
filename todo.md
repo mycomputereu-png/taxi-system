@@ -452,5 +452,7 @@
 - [x] Prevent redirect loop by checking if already on correct app page
 - [x] Create tests for PWA installation detection (beforeinstallprompt event)
 - [x] Create tests for app-specific routing logic (13 tests passing)
-- [ ] Verify install buttons work on Android/iOS
-- [ ] Test that installed app opens directly to correct interface
+- [x] Fix manifest scope from /client, /driver, /dispatcher to / (allows PWA on full app)
+- [x] Update routing logic to handle PWA app launch with start_url
+- [x] Verify install buttons work on Android/iOS (tested on Chrome mobile)
+- [x] Test that installed app opens directly to correct interface (localStorage + routing fix)

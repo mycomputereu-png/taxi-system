@@ -12,11 +12,12 @@ import { useEffect } from "react";
 function Router() {
   const [location, navigate] = useLocation();
 
-  // Redirect to installed app on first load
+  // Redirect to installed app on first load or when accessing home page
   useEffect(() => {
-    // Only redirect if on home page and an app is installed
-    if (location === "/") {
-      const installedApp = localStorage.getItem("installedApp");
+    const installedApp = localStorage.getItem("installedApp");
+    
+    // If on home page and an app is installed, redirect to it
+    if (location === "/" && installedApp) {
       if (installedApp === "client") {
         navigate("/client");
       } else if (installedApp === "driver") {
@@ -24,6 +25,15 @@ function Router() {
       } else if (installedApp === "dispatcher") {
         navigate("/dispatcher");
       }
+    }
+    
+    // Log when PWA app is launched via start_url
+    if (location === "/client" && installedApp === "client") {
+      console.log("PWA Client app launched correctly");
+    } else if (location === "/driver" && installedApp === "driver") {
+      console.log("PWA Driver app launched correctly");
+    } else if (location === "/dispatcher" && installedApp === "dispatcher") {
+      console.log("PWA Dispatcher app launched correctly");
     }
   }, [location, navigate]);
 

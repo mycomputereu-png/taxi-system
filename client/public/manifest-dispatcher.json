@@ -3,7 +3,7 @@
   "short_name": "Dispatcher",
   "description": "Gestionează curse, șoferi și clienți în timp real",
   "start_url": "/dispatcher",
-  "scope": "/dispatcher",
+  "scope": "/",
   "display": "standalone",
   "orientation": "landscape-primary",
   "background_color": "#0f172a",

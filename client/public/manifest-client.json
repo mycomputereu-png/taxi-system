@@ -3,7 +3,7 @@
   "short_name": "Taxi Bucovina",
   "description": "Cheamă taxi cu un click și urmărește șoferul live",
   "start_url": "/client",
-  "scope": "/client",
+  "scope": "/",
   "display": "standalone",
   "orientation": "portrait-primary",
   "background_color": "#0f172a",
