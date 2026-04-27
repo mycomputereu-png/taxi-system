@@ -456,3 +456,13 @@
 - [x] Update routing logic to handle PWA app launch with start_url
 - [x] Verify install buttons work on Android/iOS (tested on Chrome mobile)
 - [x] Test that installed app opens directly to correct interface (localStorage + routing fix)
+
+
+## Subdomain Configuration (In Progress)
+- [ ] Configure subdomain: client.taxisystem-fapkkap3.manus.space
+- [ ] Configure subdomain: driver.taxisystem-fapkkap3.manus.space
+- [ ] Configure subdomain: dispatcher.taxisystem-fapkkap3.manus.space
+- [ ] Wait for DNS propagation (5-10 minutes)
+- [ ] Test PWA installation on each subdomain
+- [ ] Verify manifest.json is served correctly per subdomain
+- [ ] Test app-specific routing on each subdomain
