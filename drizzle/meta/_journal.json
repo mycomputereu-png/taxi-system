@@ -57,6 +57,13 @@
       "when": 1775380142686,
       "tag": "0007_peaceful_hydra",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "5",
+      "when": 1777324885095,
+      "tag": "0008_glossy_rocket_racer",
+      "breakpoints": true
     }
   ]
 }

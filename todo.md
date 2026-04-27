@@ -469,3 +469,9 @@
 - [ ] Test PWA installation on each subdomain
 - [ ] Verify manifest.json is served correctly per subdomain
 - [ ] Test app-specific routing on each subdomain
+
+
+## Database & API Fixes
+- [x] Fix panic_alerts table missing error in Dispatcher
+- [x] Add panic_alerts table creation to runMigrations() in server/db.ts
+- [x] Restart dev server to apply migrations
