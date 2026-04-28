@@ -69,9 +69,9 @@
  *
  * -------------------------------
  * ✅ SUMMARY
- * - “map-attached” → AdvancedMarkerElement, DirectionsRenderer, Layers.
- * - “standalone” → Geocoder, DirectionsService, DistanceMatrixService, ElevationService.
- * - “data-only” → Place, Geometry utilities.
+ * - "map-attached" → AdvancedMarkerElement, DirectionsRenderer, Layers.
+ * - "standalone" → Geocoder, DirectionsService, DistanceMatrixService, ElevationService.
+ * - "data-only" → Place, Geometry utilities.
  */
 
 /// <reference types="@types/google.maps" />
@@ -92,21 +92,41 @@ const FORGE_BASE_URL =
   "https://forge.butterfly-effect.dev";
 const MAPS_PROXY_URL = `${FORGE_BASE_URL}/v1/maps/proxy`;
 
-function loadMapScript() {
-  return new Promise(resolve => {
+let mapScriptPromise: Promise<void> | null = null;
+
+function loadMapScript(): Promise<void> {
+  // Idempotent: if already loading or loaded, return existing promise
+  if (mapScriptPromise) {
+    return mapScriptPromise;
+  }
+
+  // If Google Maps already loaded, resolve immediately
+  if (window.google?.maps) {
+    return Promise.resolve();
+  }
+
+  mapScriptPromise = new Promise((resolve, reject) => {
     const script = document.createElement("script");
     script.src = `${MAPS_PROXY_URL}/maps/api/js?key=${API_KEY}&v=weekly&libraries=marker,places,geocoding,geometry`;
     script.async = true;
     script.crossOrigin = "anonymous";
     script.onload = () => {
-      resolve(null);
-      script.remove(); // Clean up immediately
+      // Verify Google Maps is available
+      if (window.google?.maps) {
+        resolve();
+      } else {
+        reject(new Error("Google Maps API loaded but window.google.maps not available"));
+      }
+      // DO NOT remove script - Google Maps needs it to remain
     };
     script.onerror = () => {
       console.error("Failed to load Google Maps script");
+      reject(new Error("Failed to load Google Maps script"));
     };
     document.head.appendChild(script);
   });
+
+  return mapScriptPromise;
 }
 
 interface MapViewProps {
@@ -118,7 +138,7 @@ interface MapViewProps {
 
 export function MapView({
   className,
-  initialCenter = { lat: 37.7749, lng: -122.4194 },
+  initialCenter = { lat: 0, lng: 0 },
   initialZoom = 12,
   onMapReady,
 }: MapViewProps) {
@@ -126,22 +146,49 @@ export function MapView({
   const map = useRef<google.maps.Map | null>(null);
 
   const init = usePersistFn(async () => {
-    await loadMapScript();
-    if (!mapContainer.current) {
-      console.error("Map container not found");
-      return;
-    }
-    map.current = new window.google.maps.Map(mapContainer.current, {
-      zoom: initialZoom,
-      center: initialCenter,
-      mapTypeControl: true,
-      fullscreenControl: true,
-      zoomControl: true,
-      streetViewControl: true,
-      mapId: "DEMO_MAP_ID",
-    });
-    if (onMapReady) {
-      onMapReady(map.current);
+    try {
+      console.log("[Map] Initializing MapView...");
+      await loadMapScript();
+      console.log("[Map] Google Maps script loaded");
+      
+      if (!mapContainer.current) {
+        console.error("[Map] Container not found");
+        return;
+      }
+      
+      // Wait for container to have dimensions
+      let attempts = 0;
+      while (mapContainer.current.offsetHeight === 0 && attempts < 50) {
+        await new Promise(resolve => setTimeout(resolve, 50));
+        attempts++;
+      }
+      
+      const rect = mapContainer.current.getBoundingClientRect();
+      console.log("[Map] Container dimensions:", { width: rect.width, height: rect.height, offsetWidth: mapContainer.current.offsetWidth, offsetHeight: mapContainer.current.offsetHeight, attempts });
+      
+      if (!window.google?.maps) {
+        console.error("[Map] Google Maps API not available after loading script");
+        return;
+      }
+      
+      console.log("[Map] Creating map instance...");
+      map.current = new window.google.maps.Map(mapContainer.current, {
+        zoom: initialZoom,
+        center: initialCenter,
+        mapTypeControl: true,
+        fullscreenControl: true,
+        zoomControl: true,
+        streetViewControl: true,
+        mapId: "DEMO_MAP_ID",
+      });
+      console.log("[Map] Map instance created successfully");
+      
+      if (onMapReady) {
+        console.log("[Map] Calling onMapReady callback");
+        onMapReady(map.current);
+      }
+    } catch (error) {
+      console.error("[Map] Failed to initialize map:", error);
     }
   });
 
@@ -150,6 +197,6 @@ export function MapView({
   }, [init]);
 
   return (
-    <div ref={mapContainer} className={cn("w-full h-[500px]", className)} />
+    <div ref={mapContainer} className={cn("w-full h-full", className)} />
   );
 }

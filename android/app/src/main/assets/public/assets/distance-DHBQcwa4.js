@@ -1,0 +1,1 @@
+function e(t,h,a,M){const s=n(a-t),c=n(M-h),o=Math.sin(s/2)*Math.sin(s/2)+Math.cos(n(t))*Math.cos(n(a))*Math.sin(c/2)*Math.sin(c/2);return 6371*(2*Math.atan2(Math.sqrt(o),Math.sqrt(1-o)))}function n(t){return t*(Math.PI/180)}export{e as calculateHaversineDistance};
