@@ -95,34 +95,70 @@ let mapScriptPromise: Promise<void> | null = null;
 async function loadMapScript(): Promise<void> {
   // Idempotent: if already loading or loaded, return existing promise
   if (mapScriptPromise) {
+    console.log("[Map] Script already loading or loaded, returning existing promise");
     return mapScriptPromise;
   }
 
   // If Google Maps already loaded, resolve immediately
   if (window.google?.maps) {
+    console.log("[Map] Google Maps already loaded in window");
     return Promise.resolve();
   }
 
   mapScriptPromise = (async () => {
     try {
       console.log("[Map] Loading Google Maps from Forge...");
+      console.log("[Map] window.__GOOGLE_MAPS_CONFIG__:", window.__GOOGLE_MAPS_CONFIG__);
 
       // Get config from window (injected at build time)
       const config = window.__GOOGLE_MAPS_CONFIG__;
       if (!config?.apiKey || !config?.apiUrl) {
+        console.error("[Map] Config missing:", { apiKey: config?.apiKey, apiUrl: config?.apiUrl });
         throw new Error("Google Maps config not found in window");
       }
 
       // Build Forge proxy URL
+      const origin = window.location.origin;
       const scriptUrl = `${config.apiUrl}/v1/maps/proxy/maps/api/js?key=${config.apiKey}&v=weekly&libraries=marker,places,geocoding,geometry`;
+      console.log("[Map] Script URL:", scriptUrl);
+      console.log("[Map] Origin:", origin);
       
       // Wait for Google Maps to load using polling
       await new Promise<void>((resolve, reject) => {
-        // Load script directly from Forge (CORS-enabled)
-        const script = document.createElement("script");
-        script.src = scriptUrl;
-        script.async = true;
-        document.head.appendChild(script);
+        // Fetch script with Origin header
+        fetch(scriptUrl, {
+          headers: {
+            'Origin': origin
+          }
+        })
+          .then(response => {
+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
+            return response.text();
+          })
+          .then(scriptText => {
+            console.log("[Map] Script fetched successfully, length:", scriptText.length);
+            // Execute the script in global context
+            const script = document.createElement('script');
+            script.textContent = scriptText;
+            document.head.appendChild(script);
+            console.log("[Map] Script injected into DOM");
+          })
+          .catch(error => {
+            console.error("[Map] Fetch error:", error);
+            // Fallback: try loading as regular script tag
+            const script = document.createElement("script");
+            script.src = scriptUrl;
+            script.async = true;
+            script.onerror = () => {
+              console.error("[Map] Script load error");
+              reject(new Error("Failed to load Google Maps script"));
+            };
+            script.onload = () => {
+              console.log("[Map] Script loaded successfully (fallback)");
+            };
+            document.head.appendChild(script);
+            console.log("[Map] Script element appended to head (fallback)");
+          });
 
         // Poll for Google Maps availability
         let attempts = 0;
@@ -132,11 +168,16 @@ async function loadMapScript(): Promise<void> {
           
           if (window.google?.maps) {
             clearInterval(checkGoogleMaps);
-            console.log("[Map] Google Maps API loaded successfully");
+            console.log("[Map] Google Maps API loaded successfully after", attempts * 100, "ms");
             resolve();
-          } else if (attempts >= maxAttempts) {
+          } else if (attempts % 10 === 0) {
+            console.log("[Map] Still waiting for Google Maps... attempt", attempts);
+          }
+          
+          if (attempts >= maxAttempts) {
             clearInterval(checkGoogleMaps);
             console.error("[Map] Google Maps API failed to load after 30 seconds");
+            console.error("[Map] window.google:", window.google);
             reject(new Error("Google Maps API failed to load after 30 seconds"));
           }
         }, 100);
