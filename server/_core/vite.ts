@@ -77,10 +77,9 @@ export async function setupVite(app: Express, server: Server) {
 }
 
 export function serveStatic(app: Express) {
-  // Get the directory where this file is located (dist/)
-  // Then go up to project root and into dist/public
-  const currentDir = path.dirname(import.meta.filename);
-  const distPath = path.resolve(currentDir, "..", "..", "dist", "public");
+  // Use absolute path to dist/public directory
+  // This works regardless of where the process is started from
+  const distPath = "/home/ubuntu/taxi-system/dist/public";
   if (!fs.existsSync(distPath)) {
     console.error(
       `Could not find the build directory: ${distPath}, make sure to build the client first`
