@@ -6,35 +6,6 @@ import path from "path";
 import { createServer as createViteServer } from "vite";
 import viteConfig from "../../vite.config";
 
-// Subdomain routing helper
-function getSubdomain(req: any): string | null {
-  const host = req.get('host') || '';
-  const parts = host.split('.');
-  
-  // For localhost:3000 or 127.0.0.1:3000, return null (no subdomain)
-  if (host.includes('localhost') || host.includes('127.0.0.1')) {
-    return null;
-  }
-  
-  // For main domain (e.g., taxibucovina.eu with 2 parts), default to dispatcher
-  if (parts.length === 2) {
-    return 'dispatcher';
-  }
-  
-  // For subdomains (e.g., dispatcher.taxibucovina.eu with 3+ parts)
-  if (parts.length > 2) {
-    const subdomain = parts[0];
-    
-    // Check if it's a valid subdomain
-    if (['client', 'driver', 'dispatcher'].includes(subdomain)) {
-      return subdomain;
-    }
-  }
-  
-  // Default to dispatcher if no valid subdomain found
-  return 'dispatcher';
-}
-
 export async function setupVite(app: Express, server: Server) {
   const serverOptions = {
     middlewareMode: true,
@@ -50,16 +21,8 @@ export async function setupVite(app: Express, server: Server) {
   });
 
   app.use(vite.middlewares);
-  
-  // Add subdomain detection to request
-  app.use((req, res, next) => {
-    (req as any).subdomain = getSubdomain(req);
-    next();
-  });
-  
   app.use("*", async (req, res, next) => {
     const url = req.originalUrl;
-    const subdomain = (req as any).subdomain;
 
     try {
       const clientTemplate = path.resolve(
@@ -75,20 +38,6 @@ export async function setupVite(app: Express, server: Server) {
         `src="/src/main.tsx"`,
         `src="/src/main.tsx?v=${nanoid()}"`
       );
-      
-      // Inject Google Maps API configuration into window object
-      const googleMapsApiKey = process.env.VITE_FRONTEND_FORGE_API_KEY || "";
-      const googleMapsApiUrl = process.env.VITE_FRONTEND_FORGE_API_URL || "https://forge.manus.ai";
-      const configScript = `
-        <script>
-          window.__GOOGLE_MAPS_CONFIG__ = {
-            apiKey: "${googleMapsApiKey}",
-            apiUrl: "${googleMapsApiUrl}"
-          };
-        </script>
-      `;
-      template = template.replace("</head>", `${configScript}</head>`);
-      
       const page = await vite.transformIndexHtml(url, template);
       res.status(200).set({ "Content-Type": "text/html" }).end(page);
     } catch (e) {
@@ -99,62 +48,20 @@ export async function setupVite(app: Express, server: Server) {
 }
 
 export function serveStatic(app: Express) {
-  // Use absolute path to dist/public directory
-  // Calculate from current working directory
-  const distPath = path.resolve(process.cwd(), "dist/public");
+  const distPath =
+    process.env.NODE_ENV === "development"
+      ? path.resolve(import.meta.dirname, "../..", "dist", "public")
+      : path.resolve(import.meta.dirname, "public");
   if (!fs.existsSync(distPath)) {
     console.error(
       `Could not find the build directory: ${distPath}, make sure to build the client first`
     );
   }
 
-  // Add subdomain detection to request
-  app.use((req, res, next) => {
-    (req as any).subdomain = getSubdomain(req);
-    next();
-  });
-
-  // Serve subdomain-specific manifest.json
-  app.get("/manifest.json", (req, res) => {
-    const subdomain = (req as any).subdomain;
-    let manifestFile = "manifest.json";
-    
-    if (subdomain === "client") {
-      manifestFile = "manifest-client.json";
-    } else if (subdomain === "driver") {
-      manifestFile = "manifest-driver.json";
-    } else if (subdomain === "dispatcher") {
-      manifestFile = "manifest-dispatcher.json";
-    }
-    
-    const manifestPath = path.resolve(distPath, manifestFile);
-    if (fs.existsSync(manifestPath)) {
-      res.setHeader("Content-Type", "application/manifest+json");
-      res.sendFile(manifestPath);
-    } else {
-      res.status(404).json({ error: "Manifest not found" });
-    }
-  });
-
-  // Serve static files but exclude index.html so we can inject config
-  app.use(express.static(distPath, {
-    index: false, // Don't serve index.html automatically
-  }));
+  app.use(express.static(distPath));
 
   // fall through to index.html if the file doesn't exist
-  app.use("*", (req, res) => {
-    const indexPath = path.resolve(distPath, "index.html");
-    let html = fs.readFileSync(indexPath, "utf-8");
-    
-    // Inject Google Maps config into production HTML
-    const googleMapsApiKey = process.env.VITE_FRONTEND_FORGE_API_KEY || "";
-    const googleMapsApiUrl = process.env.VITE_FRONTEND_FORGE_API_URL || "https://forge.manus.ai";
-    
-    // Replace placeholders in the config script
-    html = html.replace(/%VITE_FRONTEND_FORGE_API_KEY%/g, googleMapsApiKey);
-    html = html.replace(/%VITE_FRONTEND_FORGE_API_URL%/g, googleMapsApiUrl);
-    
-    res.set("Content-Type", "text/html");
-    res.send(html);
+  app.use("*", (_req, res) => {
+    res.sendFile(path.resolve(distPath, "index.html"));
   });
 }
