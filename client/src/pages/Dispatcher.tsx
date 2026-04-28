@@ -101,7 +101,8 @@ export default function Dispatcher() {
   const [selectedDriver, setSelectedDriver] = useState<any | null>(null);
   const [driverDetailsOpen, setDriverDetailsOpen] = useState(false);
 
-  // tRPC queries
+  // tRPC queries & mutations
+  const loginMutation = trpc.dispatcherAuth.login.useMutation();
   const utils = trpc.useUtils();
   const driversQuery = trpc.dispatcher.getDrivers.useQuery(undefined, { enabled: isAuthenticated });
   const activeRidesQuery = trpc.dispatcher.getActiveRides.useQuery(undefined, {
@@ -513,20 +514,17 @@ export default function Dispatcher() {
       toast.error("Email și parolă sunt obligatorii");
       return;
     }
-    setLoginLoading(true);
     try {
-      const result = await trpc.dispatcherAuth.login.mutate({ email: dispatcherEmail, password: dispatcherPassword });
+      const result = await loginMutation.mutateAsync({ email: dispatcherEmail, password: dispatcherPassword });
       localStorage.setItem("dispatcher_token", result.token);
       setDispatcherToken(result.token);
       toast.success("Autentificare reușită!");
     } catch (error: any) {
       toast.error(error.message || "Autentificare eșuată");
-    } finally {
-      setLoginLoading(false);
     }
   };
 
-  if (!dispatcherToken && !isAuthenticated) {
+  if (!dispatcherToken) {
     return (
       <div className="min-h-screen bg-gray-950 flex items-center justify-center">
         <Card className="w-96 bg-gray-900 border-gray-700">
@@ -552,9 +550,9 @@ export default function Dispatcher() {
             <Button
               className="w-full bg-yellow-500 hover:bg-yellow-600 text-black font-bold"
               onClick={handleDispatcherLogin}
-              disabled={loginLoading}
+              disabled={loginMutation.isPending}
             >
-              {loginLoading ? "Se încarcă..." : "Autentificare"}
+              {loginMutation.isPending ? "Se încărcă..." : "Autentificare"}
             </Button>
           </CardContent>
         </Card>

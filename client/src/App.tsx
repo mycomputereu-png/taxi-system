@@ -5,7 +5,6 @@ import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import Home from "./pages/Home";
 import Dispatcher from "./pages/Dispatcher";
-import DispatcherAdmin from "./pages/DispatcherAdmin";
 import ClientApp from "./pages/ClientApp";
 import DriverApp from "./pages/DriverApp";
 import { useEffect, useState } from "react";
@@ -100,8 +99,6 @@ function Router() {
     <Switch>
       <Route path="/" component={Home} />
       <Route path="/dispatcher" component={Dispatcher} />
-      <Route path="/dispatcher-admin" component={DispatcherAdmin} />
-      <Route path="/client" component={ClientApp} />
       <Route path="/driver" component={DriverApp} />
       <Route path="/404" component={NotFound} />
       <Route component={NotFound} />
