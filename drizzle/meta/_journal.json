@@ -57,6 +57,34 @@
       "when": 1775380142686,
       "tag": "0007_peaceful_hydra",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "5",
+      "when": 1777324885095,
+      "tag": "0008_glossy_rocket_racer",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "5",
+      "when": 1777349205258,
+      "tag": "0009_wooden_screwball",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "5",
+      "when": 1777389349113,
+      "tag": "0010_premium_sersi",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "5",
+      "when": 1777389697371,
+      "tag": "0011_dazzling_jack_power",
+      "breakpoints": true
     }
   ]
 }
