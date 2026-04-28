@@ -128,7 +128,10 @@ export function serveStatic(app: Express) {
     }
   });
 
-  app.use(express.static(distPath));
+  // Serve static files but exclude index.html so we can inject config
+  app.use(express.static(distPath, {
+    index: false, // Don't serve index.html automatically
+  }));
 
   // fall through to index.html if the file doesn't exist
   app.use("*", (req, res) => {
