@@ -60,8 +60,48 @@ async function startServer() {
   app.use(express.urlencoded({ limit: "50mb", extended: true }));
   // OAuth callback under /api/oauth/callback
   registerOAuthRoutes(app);
+  
+  // Google Maps proxy - server-side fetch to avoid CORS/auth issues on client
+  // MUST be before tRPC middleware to avoid interception
+  app.get('/api/maps-js', async (req, res) => {
+    try {
+      const apiUrl = process.env.VITE_FRONTEND_FORGE_API_URL || 'https://forge.manus.ai';
+      const apiKey = process.env.VITE_FRONTEND_FORGE_API_KEY;
+      
+      if (!apiKey) {
+        return res.status(500).json({ error: 'Google Maps API key not configured' });
+      }
+
+      const MAPS_PROXY_URL = `${apiUrl}/v1/maps/proxy`;
+      const scriptUrl = `${MAPS_PROXY_URL}/maps/api/js?key=${apiKey}&v=weekly&libraries=marker,places,geocoding,geometry`;
+
+      // Server-side fetch with server token
+      const response = await fetch(scriptUrl, {
+        headers: {
+          'Authorization': `Bearer ${apiKey}`,
+        },
+      });
+
+      if (!response.ok) {
+        console.error(`[Maps Proxy] Failed to fetch from Forge: ${response.status}`);
+        return res.status(response.status).json({ error: `Failed to load Google Maps: ${response.status}` });
+      }
+
+      const scriptContent = await response.text();
+      
+      // Return with correct content type and cache headers
+      res.setHeader('Content-Type', 'application/javascript');
+      res.setHeader('Cache-Control', 'public, max-age=86400'); // Cache for 1 day
+      res.send(scriptContent);
+    } catch (error) {
+      console.error('[Maps Proxy] Error:', error);
+      res.status(500).json({ error: 'Failed to load Google Maps script' });
+    }
+  });
+
   // Socket.IO for real-time communication with CORS
   initSocketIO(server);
+  
   // tRPC API with CORS headers
   app.use(
     "/api/trpc",
@@ -75,6 +115,7 @@ async function startServer() {
   app.get('/api/health', (req, res) => {
     res.json({ status: 'ok', timestamp: new Date().toISOString() });
   });
+
   // development mode uses Vite, production mode uses static files
   if (process.env.NODE_ENV === "development") {
     await setupVite(app, server);

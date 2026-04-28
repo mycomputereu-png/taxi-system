@@ -105,22 +105,13 @@ async function loadMapScript(): Promise<void> {
 
   mapScriptPromise = (async () => {
     try {
-      // Get config from injected window object
-      const config = window.__GOOGLE_MAPS_CONFIG__;
-      if (!config) {
-        throw new Error("Google Maps config not found in window object");
-      }
+      console.log("[Map] Loading Google Maps from backend proxy...");
 
-      const { apiKey, apiUrl } = config;
-      const MAPS_PROXY_URL = `${apiUrl}/v1/maps/proxy`;
-      const scriptUrl = `${MAPS_PROXY_URL}/maps/api/js?key=${apiKey}&v=weekly&libraries=marker,places,geocoding,geometry`;
-
-      console.log("[Map] Loading Google Maps from:", scriptUrl);
-
-      // Fetch script with Authorization header
-      const response = await fetch(scriptUrl, {
-        headers: apiKey ? { "Authorization": `Bearer ${apiKey}` } : {},
-      });
+      // Load script from backend proxy (server-side fetch with server token)
+      // This avoids CORS/auth issues that occur when client fetches from Forge directly
+      const scriptUrl = `/api/maps-js`;
+      
+      const response = await fetch(scriptUrl);
 
       if (!response.ok) {
         throw new Error(`Failed to load Google Maps script: ${response.status}`);
@@ -152,7 +143,8 @@ async function loadMapScript(): Promise<void> {
         }, 10000);
       });
     } catch (error) {
-      console.error("Failed to load Google Maps script", error);
+      console.error("[Map] Failed to load Google Maps script", error);
+      mapScriptPromise = null; // Reset so retries work
       throw error;
     }
   })();

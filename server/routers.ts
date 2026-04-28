@@ -504,7 +504,7 @@ export const appRouter = router({
 
   dispatcher: router({
     // All dispatcher procedures require dispatcher token authentication
-  addDriver: protectedProcedure
+    addDriver: protectedProcedure
       .input(
         z.object({
           username: z.string(),
