@@ -18,6 +18,20 @@ const redirectToLoginIfUnauthorized = (error: unknown) => {
 
   if (!isUnauthorized) return;
 
+  // Don't redirect to OAuth if dispatcher is logged in
+  const dispatcherToken = localStorage.getItem('dispatcher_token');
+  if (dispatcherToken) {
+    console.log('[Auth] Unauthorized error but dispatcher token exists, not redirecting to OAuth');
+    return;
+  }
+
+  // Don't redirect to OAuth if we're on dispatcher page
+  const pathname = window.location.pathname;
+  if (pathname.includes('/dispatcher')) {
+    console.log('[Auth] On dispatcher page, not redirecting to OAuth');
+    return;
+  }
+
   window.location.href = getLoginUrl();
 };
 
@@ -43,9 +57,21 @@ const trpcClient = trpc.createClient({
       url: "/api/trpc",
       transformer: superjson,
       fetch(input, init) {
+        const headers = new Headers(init?.headers || {});
+        
+        // Add dispatcher token if available (but not for login request)
+        const dispatcherToken = localStorage.getItem('dispatcher_token');
+        const url = typeof input === 'string' ? input : input.toString();
+        const isLoginRequest = url.includes('dispatcherAuth.login');
+        
+        if (dispatcherToken && !isLoginRequest) {
+          headers.set('X-Dispatcher-Token', dispatcherToken);
+        }
+        
         return globalThis.fetch(input, {
           ...(init ?? {}),
           credentials: "include",
+          headers,
         });
       },
     }),

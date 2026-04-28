@@ -497,3 +497,10 @@
 - [ ] Add dispatcher status toggle (active/inactive)
 - [ ] Test admin panel create/edit/delete functionality
 - [ ] Deploy and verify on both Manus and Oracle Cloud
+
+## BUG: Dispatcher login redirects to Manus OAuth
+- [ ] Fix: After email/password login, system redirects to Manus OAuth instead of dispatcher dashboard
+- [ ] Cause: Likely UNAUTHORIZED error from tRPC triggering OAuth redirect in main.tsx
+- [ ] Solution: Ensure dispatcherAuth.login doesn't trigger OAuth redirect on error
+- [ ] Test on Manus dev server
+- [ ] Test on Oracle Cloud taxibucovina.eu

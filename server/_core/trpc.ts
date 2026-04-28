@@ -27,6 +27,23 @@ const requireUser = t.middleware(async opts => {
 
 export const protectedProcedure = t.procedure.use(requireUser);
 
+const requireDispatcherToken = t.middleware(async opts => {
+  const { ctx, next } = opts;
+
+  if (!ctx.dispatcherToken) {
+    throw new TRPCError({ code: "UNAUTHORIZED", message: UNAUTHED_ERR_MSG });
+  }
+
+  return next({
+    ctx: {
+      ...ctx,
+      dispatcherToken: ctx.dispatcherToken,
+    },
+  });
+});
+
+export const dispatcherProtectedProcedure = t.procedure.use(requireDispatcherToken);
+
 export const adminProcedure = t.procedure.use(
   t.middleware(async opts => {
     const { ctx, next } = opts;

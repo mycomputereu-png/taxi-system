@@ -67,6 +67,20 @@ export async function setupVite(app: Express, server: Server) {
         `src="/src/main.tsx"`,
         `src="/src/main.tsx?v=${nanoid()}"`
       );
+      
+      // Inject Google Maps API configuration into window object
+      const googleMapsApiKey = process.env.VITE_FRONTEND_FORGE_API_KEY || "";
+      const googleMapsApiUrl = process.env.VITE_FRONTEND_FORGE_API_URL || "https://forge.manus.ai";
+      const configScript = `
+        <script>
+          window.__GOOGLE_MAPS_CONFIG__ = {
+            apiKey: "${googleMapsApiKey}",
+            apiUrl: "${googleMapsApiUrl}"
+          };
+        </script>
+      `;
+      template = template.replace("</head>", `${configScript}</head>`);
+      
       const page = await vite.transformIndexHtml(url, template);
       res.status(200).set({ "Content-Type": "text/html" }).end(page);
     } catch (e) {
@@ -78,8 +92,8 @@ export async function setupVite(app: Express, server: Server) {
 
 export function serveStatic(app: Express) {
   // Use absolute path to dist/public directory
-  // This works regardless of where the process is started from
-  const distPath = "/home/ubuntu/taxi-system/dist/public";
+  // Calculate from current working directory
+  const distPath = path.resolve(process.cwd(), "dist/public");
   if (!fs.existsSync(distPath)) {
     console.error(
       `Could not find the build directory: ${distPath}, make sure to build the client first`

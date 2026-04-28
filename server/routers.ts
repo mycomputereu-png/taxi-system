@@ -44,7 +44,7 @@ import {
 import { getSessionCookieOptions } from "./_core/cookies";
 const COOKIE_NAME = "session";
 import { systemRouter } from "./_core/systemRouter";
-import { protectedProcedure, publicProcedure, router } from "./_core/trpc";
+import { protectedProcedure, publicProcedure, router, dispatcherProtectedProcedure } from "./_core/trpc";
 import { emitToClient, emitToDispatchers, emitToDriver, setRideAcceptanceTimeout, clearRideAcceptanceTimeout } from "./socket";
 
 // ─── Auth helpers ─────────────────────────────────────────────────────────────
@@ -503,6 +503,7 @@ export const appRouter = router({
   }),
 
   dispatcher: router({
+    // All dispatcher procedures require dispatcher token authentication
   addDriver: protectedProcedure
       .input(
         z.object({
@@ -528,7 +529,7 @@ export const appRouter = router({
         return { success: true };
       }),
 
-    getDrivers: protectedProcedure.query(async () => {
+    getDrivers: dispatcherProtectedProcedure.query(async () => {
       return getAllDrivers();
     }),
 
@@ -581,15 +582,15 @@ export const appRouter = router({
         return { success: true };
       }),
 
-    getPendingRides: protectedProcedure.query(async () => {
+    getPendingRides: dispatcherProtectedProcedure.query(async () => {
       return getPendingRides();
     }),
 
-    getActiveRides: protectedProcedure.query(async (): Promise<ActiveRide[]> => {
+    getActiveRides: dispatcherProtectedProcedure.query(async (): Promise<ActiveRide[]> => {
       return getActiveRides();
     }),
 
-    getRideHistory: protectedProcedure.query(async () => {
+    getRideHistory: dispatcherProtectedProcedure.query(async () => {
       return getRideHistory();
     }),
 
@@ -611,7 +612,7 @@ export const appRouter = router({
         return { success: true };
       }),
 
-    getAllClientsWithRatings: protectedProcedure.query(async () => {
+    getAllClientsWithRatings: dispatcherProtectedProcedure.query(async () => {
       return getAllClientsWithRatings();
     }),
 

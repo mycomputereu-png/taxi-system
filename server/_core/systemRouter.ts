@@ -13,6 +13,13 @@ export const systemRouter = router({
       ok: true,
     })),
 
+  getConfig: publicProcedure
+    .query(() => ({
+      googleMapsApiKey: process.env.VITE_FRONTEND_FORGE_API_KEY || "",
+      googleMapsApiUrl: process.env.VITE_FRONTEND_FORGE_API_URL || "https://forge.manus.ai",
+    })),
+
+
   notifyOwner: adminProcedure
     .input(
       z.object({
