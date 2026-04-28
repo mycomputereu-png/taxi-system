@@ -19,6 +19,13 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
     THIS IS THE END OF A COMMENT BLOCK, BLOCK TO BE DELETED -->
+    <!-- Google Maps Configuration - Injected at build time -->
+    <script>
+      window.__GOOGLE_MAPS_CONFIG__ = {
+        apiKey: "%VITE_FRONTEND_FORGE_API_KEY%",
+        apiUrl: "%VITE_FRONTEND_FORGE_API_URL%"
+      };
+    </script>
   </head>
 
   <body>
