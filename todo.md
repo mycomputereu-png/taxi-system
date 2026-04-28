@@ -475,3 +475,14 @@
 - [x] Fix panic_alerts table missing error in Dispatcher
 - [x] Add panic_alerts table creation to runMigrations() in server/db.ts
 - [x] Restart dev server to apply migrations
+
+## Dispatcher Admin Panel - NEW
+- [ ] Create tRPC procedures for dispatcher management (create, list, update, delete)
+- [ ] Build admin panel UI component with dispatcher list and forms
+- [ ] Add create dispatcher form with email/password validation
+- [ ] Add edit dispatcher form with password change option
+- [ ] Add delete dispatcher with confirmation modal
+- [ ] Implement role-based access control (only admin can manage dispatchers)
+- [ ] Add dispatcher status toggle (active/inactive)
+- [ ] Test admin panel create/edit/delete functionality
+- [ ] Deploy and verify on both Manus and Oracle Cloud

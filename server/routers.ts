@@ -503,7 +503,50 @@ export const appRouter = router({
       }),
   }),
 
-    addDriver: protectedProcedure
+  dispatcherAdmin: router({
+    list: protectedProcedure.query(async () => {
+      const { getAllDispatchers } = await import("./dispatcher-auth");
+      return getAllDispatchers();
+    }),
+
+    create: protectedProcedure
+      .input(z.object({ email: z.string().email(), password: z.string().min(8), name: z.string(), phone: z.string().optional() }))
+      .mutation(async ({ input }) => {
+        const { createDispatcher } = await import("./dispatcher-auth");
+        await createDispatcher(input.email, input.password, input.name, input.phone);
+        return { success: true };
+      }),
+
+    update: protectedProcedure
+      .input(z.object({ id: z.number(), name: z.string().optional(), phone: z.string().optional(), status: z.enum(["active", "inactive", "suspended"]).optional() }))
+      .mutation(async ({ input }) => {
+        const { updateDispatcher } = await import("./dispatcher-auth");
+        const data: any = {};
+        if (input.name) data.name = input.name;
+        if (input.phone) data.phone = input.phone;
+        if (input.status) data.status = input.status;
+        await updateDispatcher(input.id, data);
+        return { success: true };
+      }),
+
+    updatePassword: protectedProcedure
+      .input(z.object({ id: z.number(), newPassword: z.string().min(8) }))
+      .mutation(async ({ input }) => {
+        const { updateDispatcherPassword } = await import("./dispatcher-auth");
+        await updateDispatcherPassword(input.id, input.newPassword);
+        return { success: true };
+      }),
+
+    delete: protectedProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ input }) => {
+        const { deleteDispatcher } = await import("./dispatcher-auth");
+        await deleteDispatcher(input.id);
+        return { success: true };
+      }),
+  }),
+
+  addDriver: protectedProcedure
       .input(
         z.object({
           username: z.string(),
