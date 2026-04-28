@@ -33,6 +33,10 @@ async function startServer() {
   const app = express();
   const server = createServer(app);
   
+  // Trust proxy - required for HTTPS behind Nginx/load balancer
+  // Allows req.protocol, req.hostname, and cookie secure flag to work correctly
+  app.set('trust proxy', 1);
+  
   // CORS middleware - allow requests from same domain and subdomains
   app.use((req, res, next) => {
     const origin = req.get('origin');
