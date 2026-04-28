@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from "react";
-import { useAuth } from "@/_core/hooks/useAuth";
+// Removed Manus OAuth dependency - using only dispatcher token
 import { trpc } from "@/lib/trpc";
 import { MapView } from "@/components/Map";
 import { Button } from "@/components/ui/button";
@@ -75,7 +75,7 @@ type RideWithClientDriver = {
 };
 
 export default function Dispatcher() {
-  const { user, loading, isAuthenticated, logout } = useAuth();
+  // Removed Manus OAuth - using only dispatcher authentication
   const { emit, on, socket: socketRef } = useSocket();
 
   const [dispatcherToken, setDispatcherToken] = useState<string | null>(localStorage.getItem("dispatcher_token"));
@@ -104,12 +104,12 @@ export default function Dispatcher() {
   // tRPC queries & mutations
   const loginMutation = trpc.dispatcherAuth.login.useMutation();
   const utils = trpc.useUtils();
-  const driversQuery = trpc.dispatcher.getDrivers.useQuery(undefined, { enabled: isAuthenticated });
+  const driversQuery = trpc.dispatcher.getDrivers.useQuery(undefined, { enabled: !!dispatcherToken });
   const activeRidesQuery = trpc.dispatcher.getActiveRides.useQuery(undefined, {
-    enabled: isAuthenticated,
+    enabled: !!dispatcherToken,
     refetchInterval: 5000,
   });
-  const historyQuery = trpc.dispatcher.getRideHistory.useQuery(undefined, { enabled: isAuthenticated });
+  const historyQuery = trpc.dispatcher.getRideHistory.useQuery(undefined, { enabled: !!dispatcherToken });
   const clientsQuery = trpc.dispatcher.getAllClientsWithRatings.useQuery();
   
   // Debug logging
@@ -122,7 +122,7 @@ export default function Dispatcher() {
     })));
   }
   const panicAlertsQuery = trpc.panic.getActivePanicAlerts.useQuery(undefined, {
-    enabled: isAuthenticated,
+    enabled: !!dispatcherToken,
     refetchInterval: 5000,
   });
 
@@ -181,7 +181,7 @@ export default function Dispatcher() {
 
   // Socket.IO setup
   useEffect(() => {
-    if (!isAuthenticated) return;
+    if (!dispatcherToken) return;
     
     // Wait for Socket.IO to connect before emitting auth
     const socket = socketRef.current || getSocket();
@@ -261,7 +261,7 @@ export default function Dispatcher() {
       unsubRideStatus();
       unsubClientLoc();
     };
-  }, [isAuthenticated, emit, on, utils]);
+  }, [dispatcherToken, emit, on, utils]);
 
   // Initialize driver locations from DB
   useEffect(() => {
@@ -501,13 +501,7 @@ export default function Dispatcher() {
     });
   }, []);
 
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-gray-950 flex items-center justify-center">
-        <div className="text-white text-xl">Se încarcă...</div>
-      </div>
-    );
-  }
+
 
   const handleDispatcherLogin = async () => {
     if (!dispatcherEmail || !dispatcherPassword) {
@@ -575,8 +569,8 @@ export default function Dispatcher() {
           <Badge className="bg-green-600 text-white">Online</Badge>
         </div>
         <div className="flex items-center gap-4">
-          <span className="text-gray-400 text-sm">{user?.name}</span>
-          <Button variant="outline" size="sm" onClick={() => logout()} className="border-gray-600 text-gray-300 hover:bg-gray-800">
+          <span className="text-gray-400 text-sm">Dispatcher</span>
+          <Button variant="outline" size="sm" onClick={() => { localStorage.removeItem('dispatcher_token'); setDispatcherToken(null); }} className="border-gray-600 text-gray-300 hover:bg-gray-800">
             <LogOut className="w-4 h-4 mr-1" /> Ieșire
           </Button>
         </div>
