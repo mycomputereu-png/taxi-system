@@ -459,6 +459,50 @@ export const appRouter = router({
 
   // ─── Dispatcher ──────────────────────────────────────────────────────────────
   dispatcher: router({
+  dispatcherAuth: router({
+    login: publicProcedure
+      .input(z.object({ email: z.string().email(), password: z.string() }))
+      .mutation(async ({ input, ctx }) => {
+        const { verifyDispatcherPassword, createDispatcherSession } = await import("./dispatcher-auth");
+        const dispatcher = await verifyDispatcherPassword(input.email, input.password);
+        if (!dispatcher) throw new TRPCError({ code: "UNAUTHORIZED", message: "Invalid email or password" });
+        
+        const token = generateToken();
+        const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+        await createDispatcherSession(dispatcher.id, token, expiresAt);
+        
+        const cookieOptions = getSessionCookieOptions(ctx.req);
+        ctx.res.cookie("dispatcher_session", token, { ...cookieOptions, maxAge: 30 * 24 * 60 * 60 * 1000 });
+        
+        return { token, dispatcher: { id: dispatcher.id, email: dispatcher.email, name: dispatcher.name } };
+      }),
+
+    logout: publicProcedure
+      .input(z.object({ token: z.string() }))
+      .mutation(async ({ input }) => {
+        const { deleteDispatcherSession } = await import("./dispatcher-auth");
+        await deleteDispatcherSession(input.token);
+        return { success: true };
+      }),
+
+    getMe: publicProcedure
+      .input(z.object({ token: z.string() }))
+      .query(async ({ input }) => {
+        const { getDispatcherSession } = await import("./dispatcher-auth");
+        const session = await getDispatcherSession(input.token);
+        if (!session) throw new TRPCError({ code: "UNAUTHORIZED" });
+        
+        const { getDb } = await import("./db");
+        const db = await getDb();
+        if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
+        
+        const { dispatchers } = await import("../drizzle/schema");
+        const { eq } = await import("drizzle-orm");
+        const result = await db.select().from(dispatchers).where(eq(dispatchers.id, session.dispatcherId));
+        return result[0] || null;
+      }),
+  }),
+
     addDriver: protectedProcedure
       .input(
         z.object({

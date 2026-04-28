@@ -78,6 +78,11 @@ export default function Dispatcher() {
   const { user, loading, isAuthenticated, logout } = useAuth();
   const { emit, on, socket: socketRef } = useSocket();
 
+  const [dispatcherToken, setDispatcherToken] = useState<string | null>(localStorage.getItem("dispatcher_token"));
+  const [dispatcherEmail, setDispatcherEmail] = useState("");
+  const [dispatcherPassword, setDispatcherPassword] = useState("");
+  const [loginLoading, setLoginLoading] = useState(false);
+
   const [mapReady, setMapReady] = useState(false);
   const mapRef = useRef<google.maps.Map | null>(null);
   const driverMarkersRef = useRef<Map<number, google.maps.Marker>>(new Map());
@@ -503,7 +508,25 @@ export default function Dispatcher() {
     );
   }
 
-  if (!isAuthenticated) {
+  const handleDispatcherLogin = async () => {
+    if (!dispatcherEmail || !dispatcherPassword) {
+      toast.error("Email și parolă sunt obligatorii");
+      return;
+    }
+    setLoginLoading(true);
+    try {
+      const result = await trpc.dispatcherAuth.login.mutate({ email: dispatcherEmail, password: dispatcherPassword });
+      localStorage.setItem("dispatcher_token", result.token);
+      setDispatcherToken(result.token);
+      toast.success("Autentificare reușită!");
+    } catch (error: any) {
+      toast.error(error.message || "Autentificare eșuată");
+    } finally {
+      setLoginLoading(false);
+    }
+  };
+
+  if (!dispatcherToken && !isAuthenticated) {
     return (
       <div className="min-h-screen bg-gray-950 flex items-center justify-center">
         <Card className="w-96 bg-gray-900 border-gray-700">
@@ -512,11 +535,26 @@ export default function Dispatcher() {
           </CardHeader>
           <CardContent className="flex flex-col gap-4">
             <p className="text-gray-400 text-center">Autentifică-te pentru a accesa panoul de dispatcher</p>
+            <Input
+              type="email"
+              placeholder="Email"
+              value={dispatcherEmail}
+              onChange={(e) => setDispatcherEmail(e.target.value)}
+              className="bg-gray-800 border-gray-600 text-white"
+            />
+            <Input
+              type="password"
+              placeholder="Parolă"
+              value={dispatcherPassword}
+              onChange={(e) => setDispatcherPassword(e.target.value)}
+              className="bg-gray-800 border-gray-600 text-white"
+            />
             <Button
               className="w-full bg-yellow-500 hover:bg-yellow-600 text-black font-bold"
-              onClick={() => (window.location.href = getLoginUrl())}
+              onClick={handleDispatcherLogin}
+              disabled={loginLoading}
             >
-              Autentificare Dispatcher
+              {loginLoading ? "Se încarcă..." : "Autentificare"}
             </Button>
           </CardContent>
         </Card>

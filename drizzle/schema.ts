@@ -158,3 +158,28 @@ export const panicAlerts = mysqlTable("panic_alerts", {
 
 export type PanicAlert = typeof panicAlerts.$inferSelect;
 export type InsertPanicAlert = typeof panicAlerts.$inferInsert;
+
+// Dispatchers table - email/password authentication
+export const dispatchers = mysqlTable("dispatchers", {
+  id: int("id").autoincrement().primaryKey(),
+  email: varchar("email", { length: 320 }).notNull().unique(),
+  passwordHash: varchar("passwordHash", { length: 256 }).notNull(),
+  name: varchar("name", { length: 128 }).notNull(),
+  phone: varchar("phone", { length: 32 }),
+  status: mysqlEnum("status", ["active", "inactive", "suspended"]).default("active").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  lastSignedIn: timestamp("lastSignedIn"),
+});
+
+export type Dispatcher = typeof dispatchers.$inferSelect;
+export type InsertDispatcher = typeof dispatchers.$inferInsert;
+
+// Dispatcher sessions
+export const dispatcherSessions = mysqlTable("dispatcher_sessions", {
+  id: int("id").autoincrement().primaryKey(),
+  dispatcherId: int("dispatcherId").notNull(),
+  token: varchar("token", { length: 512 }).notNull().unique(),
+  expiresAt: timestamp("expiresAt").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
