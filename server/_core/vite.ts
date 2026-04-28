@@ -11,20 +11,28 @@ function getSubdomain(req: any): string | null {
   const host = req.get('host') || '';
   const parts = host.split('.');
   
-  // For localhost:3000 or 127.0.0.1:3000
-  if (parts.length <= 2 || host.includes('localhost') || host.includes('127.0.0.1')) {
+  // For localhost:3000 or 127.0.0.1:3000, return null (no subdomain)
+  if (host.includes('localhost') || host.includes('127.0.0.1')) {
     return null;
   }
   
-  // Extract subdomain (first part before first dot)
-  const subdomain = parts[0];
-  
-  // Check if it's a valid subdomain (not the main domain)
-  if (['client', 'driver', 'dispatcher'].includes(subdomain)) {
-    return subdomain;
+  // For main domain (e.g., taxibucovina.eu with 2 parts), default to dispatcher
+  if (parts.length === 2) {
+    return 'dispatcher';
   }
   
-  return null;
+  // For subdomains (e.g., dispatcher.taxibucovina.eu with 3+ parts)
+  if (parts.length > 2) {
+    const subdomain = parts[0];
+    
+    // Check if it's a valid subdomain
+    if (['client', 'driver', 'dispatcher'].includes(subdomain)) {
+      return subdomain;
+    }
+  }
+  
+  // Default to dispatcher if no valid subdomain found
+  return 'dispatcher';
 }
 
 export async function setupVite(app: Express, server: Server) {

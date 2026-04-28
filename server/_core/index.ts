@@ -65,8 +65,8 @@ async function startServer() {
   // MUST be before tRPC middleware to avoid interception
   app.get('/api/maps-js', async (req, res) => {
     try {
-      const apiUrl = process.env.VITE_FRONTEND_FORGE_API_URL || 'https://forge.manus.ai';
-      const apiKey = process.env.VITE_FRONTEND_FORGE_API_KEY;
+      const apiUrl = process.env.BUILT_IN_FORGE_API_URL || 'https://forge.manus.ai';
+      const apiKey = process.env.BUILT_IN_FORGE_API_KEY;
       
       if (!apiKey) {
         return res.status(500).json({ error: 'Google Maps API key not configured' });
@@ -75,15 +75,11 @@ async function startServer() {
       const MAPS_PROXY_URL = `${apiUrl}/v1/maps/proxy`;
       const scriptUrl = `${MAPS_PROXY_URL}/maps/api/js?key=${apiKey}&v=weekly&libraries=marker,places,geocoding,geometry`;
 
-      // Server-side fetch with server token
-      const response = await fetch(scriptUrl, {
-        headers: {
-          'Authorization': `Bearer ${apiKey}`,
-        },
-      });
+      // Server-side fetch - key is already in URL
+      const response = await fetch(scriptUrl);
 
       if (!response.ok) {
-        console.error(`[Maps Proxy] Failed to fetch from Forge: ${response.status}`);
+        console.error(`[Maps Proxy] Failed to fetch from Forge: ${response.status} - URL: ${scriptUrl}`);
         return res.status(response.status).json({ error: `Failed to load Google Maps: ${response.status}` });
       }
 

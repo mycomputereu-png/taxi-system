@@ -1,4 +1,4 @@
-/**
+/*
  * GOOGLE MAPS FRONTEND INTEGRATION - ESSENTIAL GUIDE
  *
  * USAGE FROM PARENT COMPONENT:
@@ -105,42 +105,41 @@ async function loadMapScript(): Promise<void> {
 
   mapScriptPromise = (async () => {
     try {
-      console.log("[Map] Loading Google Maps from backend proxy...");
+      console.log("[Map] Loading Google Maps from Forge...");
 
-      // Load script from backend proxy (server-side fetch with server token)
-      // This avoids CORS/auth issues that occur when client fetches from Forge directly
-      const scriptUrl = `/api/maps-js`;
-      
-      const response = await fetch(scriptUrl);
-
-      if (!response.ok) {
-        throw new Error(`Failed to load Google Maps script: ${response.status}`);
+      // Get config from window (injected at build time)
+      const config = window.__GOOGLE_MAPS_CONFIG__;
+      if (!config?.apiKey || !config?.apiUrl) {
+        throw new Error("Google Maps config not found in window");
       }
 
-      const scriptContent = await response.text();
-
-      // Create and execute script in page context
-      const script = document.createElement("script");
-      script.textContent = scriptContent;
-      script.async = true;
-      document.head.appendChild(script);
-
-      // Wait for Google Maps to load
+      // Build Forge proxy URL
+      const scriptUrl = `${config.apiUrl}/v1/maps/proxy/maps/api/js?key=${config.apiKey}&v=weekly&libraries=marker,places,geocoding,geometry`;
+      
+      // Wait for Google Maps to load using polling
       await new Promise<void>((resolve, reject) => {
+        // Load script directly from Forge (CORS-enabled)
+        const script = document.createElement("script");
+        script.src = scriptUrl;
+        script.async = true;
+        document.head.appendChild(script);
+
+        // Poll for Google Maps availability
+        let attempts = 0;
+        const maxAttempts = 300; // 30 seconds at 100ms intervals
         const checkGoogleMaps = setInterval(() => {
+          attempts++;
+          
           if (window.google?.maps) {
             clearInterval(checkGoogleMaps);
+            console.log("[Map] Google Maps API loaded successfully");
             resolve();
+          } else if (attempts >= maxAttempts) {
+            clearInterval(checkGoogleMaps);
+            console.error("[Map] Google Maps API failed to load after 30 seconds");
+            reject(new Error("Google Maps API failed to load after 30 seconds"));
           }
         }, 100);
-
-        // Timeout after 10 seconds
-        setTimeout(() => {
-          clearInterval(checkGoogleMaps);
-          if (!window.google?.maps) {
-            reject(new Error("Google Maps API loaded but window.google.maps not available"));
-          }
-        }, 10000);
       });
     } catch (error) {
       console.error("[Map] Failed to load Google Maps script", error);
@@ -160,49 +159,52 @@ interface MapViewProps {
 }
 
 export function MapView({
-  className,
-  initialCenter = { lat: 0, lng: 0 },
-  initialZoom = 12,
+  className = "",
+  initialCenter = { lat: 47.1667, lng: 25.6333 }, // Bucovina default
+  initialZoom = 13,
   onMapReady,
 }: MapViewProps) {
-  const mapContainer = useRef<HTMLDivElement>(null);
-  const map = useRef<google.maps.Map | null>(null);
-
-  const init = useRef<() => Promise<void>>(async () => {
-    try {
-      console.log("[Map] Initializing MapView...");
-      await loadMapScript();
-      console.log("[Map] Google Maps script loaded");
-
-      if (!mapContainer.current) {
-        throw new Error("Map container not found");
-      }
-
-      if (!window.google?.maps) {
-        throw new Error("Google Maps not available");
-      }
-
-      map.current = new window.google.maps.Map(mapContainer.current, {
-        center: initialCenter,
-        zoom: initialZoom,
-        mapId: "taxi-dispatcher-map",
-      });
-
-      console.log("[Map] Map initialized successfully");
-      onMapReady?.(map.current);
-    } catch (error) {
-      console.error("[Map] Failed to initialize map:", error);
-    }
-  });
+  const containerRef = useRef<HTMLDivElement>(null);
+  const mapRef = useRef<google.maps.Map | null>(null);
 
   useEffect(() => {
-    init.current?.();
-  }, []);
+    let isMounted = true;
+
+    (async () => {
+      try {
+        // Load Google Maps script
+        await loadMapScript();
+
+        if (!isMounted || !containerRef.current) return;
+
+        // Initialize map
+        const map = new window.google!.maps.Map(containerRef.current, {
+          zoom: initialZoom,
+          center: initialCenter,
+          mapTypeControl: true,
+          fullscreenControl: true,
+          streetViewControl: true,
+          zoomControl: true,
+          mapTypeId: "roadmap",
+        });
+
+        mapRef.current = map;
+        onMapReady?.(map);
+        console.log("[Map] Map initialized successfully");
+      } catch (error) {
+        console.error("[Map] Failed to initialize map:", error);
+      }
+    })();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [initialCenter, initialZoom, onMapReady]);
 
   return (
     <div
-      ref={mapContainer}
-      className={`w-full h-full rounded-lg overflow-hidden ${className || ""}`}
+      ref={containerRef}
+      className={`w-full h-full bg-gray-900 ${className}`}
       style={{ minHeight: "400px" }}
     />
   );
