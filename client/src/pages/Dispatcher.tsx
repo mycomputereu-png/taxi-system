@@ -34,6 +34,8 @@ type ClientMarker = {
   lat: number;
   lng: number;
   marker?: google.maps.Marker;
+  createdAt?: Date; // Ride creation time for alert calculation
+  isAlert?: boolean; // Whether client is in alert state (waiting > 5 min)
 };
 
 type RideWithClientDriver = {
@@ -96,6 +98,7 @@ export default function Dispatcher() {
   const [selectedClientId, setSelectedClientId] = useState<number | null>(null);
   const [ratingsSortBy, setRatingsSortBy] = useState<"newest" | "oldest" | "highest" | "lowest">("newest");
   const [ridesSortBy, setRidesSortBy] = useState<"newest" | "oldest" | "completed" | "cancelled">("newest");
+  const alertedClientsRef = useRef<Set<number>>(new Set()); // Track which clients have been alerted
   const [selectedPanicAlertId, setSelectedPanicAlertId] = useState<number | null>(null);
   const [panicResponseNote, setPanicResponseNote] = useState("");
   const [selectedDriver, setSelectedDriver] = useState<any | null>(null);
@@ -292,6 +295,8 @@ export default function Dispatcher() {
       const next = new Map(prev);
       for (const r of activeRidesQuery.data) {
         if (r.clientLat && r.clientLng && r.client) {
+          const waitTimeMs = Date.now() - new Date(r.createdAt).getTime();
+          const isAlert = waitTimeMs > 5 * 60 * 1000;
           next.set(r.clientId, {
             id: r.clientId,
             rideId: r.id,
@@ -299,12 +304,52 @@ export default function Dispatcher() {
             name: r.client.name ?? undefined,
             lat: parseFloat(String(r.clientLat)),
             lng: parseFloat(String(r.clientLng)),
+            createdAt: new Date(r.createdAt),
+            isAlert: isAlert,
           });
         }
       }
       return next;
     });
   }, [activeRidesQuery.data]);
+
+  // Update alert status periodically and trigger notifications
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setClientLocations((prev) => {
+        const next = new Map(prev);
+        for (const [id, client] of next) {
+          if (client.createdAt) {
+            const waitTimeMs = Date.now() - client.createdAt.getTime();
+            const wasAlert = client.isAlert;
+            client.isAlert = waitTimeMs > 5 * 60 * 1000;
+            
+            // Trigger alert notification when client transitions to alert state
+            if (client.isAlert && !wasAlert && !alertedClientsRef.current.has(id)) {
+              alertedClientsRef.current.add(id);
+              
+              // Play alert sound
+              const audio = new Audio('/alert-notification.wav');
+              audio.play().catch(e => console.error('Failed to play alert sound:', e));
+              
+              // Show toast notification
+              toast.error(
+                `⚠️ Client ${client.name || client.phone} waiting for ${Math.round(waitTimeMs / 60000)} minutes!`,
+                { duration: 10000 }
+              );
+            }
+            
+            // Reset alert tracking when client is picked up
+            if (!client.isAlert && alertedClientsRef.current.has(id)) {
+              alertedClientsRef.current.delete(id);
+            }
+          }
+        }
+        return next;
+      });
+    }, 1000);
+    return () => clearInterval(interval);
+  }, []);
 
   // Update map markers
   useEffect(() => {
@@ -357,25 +402,29 @@ export default function Dispatcher() {
       });
     });
 
-    // Client markers (red circle)
+    // Client markers (red circle, yellow if alert)
     console.log("[Dispatcher] Rendering client markers, count:", clientLocations.size);
     clientLocations.forEach((c) => {
       console.log("[Dispatcher] Processing client marker:", c);
       let marker = clientMarkersRef.current.get(c.id);
+      const isAlert = c.isAlert || false;
+      const fillColor = isAlert ? "#fbbf24" : "#ef4444"; // Yellow if alert, red otherwise
+      const scale = isAlert ? 12 : 10; // Larger if alert
+      
       if (!marker) {
         marker = new google.maps.Marker({
           map: mapRef.current!,
           icon: {
             path: google.maps.SymbolPath.CIRCLE,
-            scale: 10,
-            fillColor: "#ef4444",
+            scale: scale,
+            fillColor: fillColor,
             fillOpacity: 1,
-            strokeColor: "#fff",
-            strokeWeight: 3,
+            strokeColor: isAlert ? "#ff0000" : "#fff",
+            strokeWeight: isAlert ? 4 : 3,
           },
           title: c.phone,
-          zIndex: 50,
-          animation: google.maps.Animation.DROP,
+          zIndex: isAlert ? 100 : 50, // Higher z-index for alerts
+          animation: isAlert ? google.maps.Animation.BOUNCE : undefined,
         });
         const infoWindow = new google.maps.InfoWindow();
         marker.addListener("click", () => {
@@ -390,6 +439,22 @@ export default function Dispatcher() {
           infoWindow.open(mapRef.current!, marker);
         });
         clientMarkersRef.current.set(c.id, marker);
+      } else {
+        // Update existing marker with alert status
+        marker.setIcon({
+          path: google.maps.SymbolPath.CIRCLE,
+          scale: scale,
+          fillColor: fillColor,
+          fillOpacity: 1,
+          strokeColor: isAlert ? "#ff0000" : "#fff",
+          strokeWeight: isAlert ? 4 : 3,
+        });
+        marker.setZIndex(isAlert ? 100 : 50);
+        if (isAlert && marker.getAnimation() === null) {
+          marker.setAnimation(google.maps.Animation.BOUNCE);
+        } else if (!isAlert && marker.getAnimation() !== null) {
+          marker.setAnimation(null);
+        }
       }
       marker.setPosition({ lat: c.lat, lng: c.lng });
     });

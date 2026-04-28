@@ -204,8 +204,8 @@ export function MapView({
   return (
     <div
       ref={containerRef}
-      className={`w-full h-full bg-gray-900 ${className}`}
-      style={{ minHeight: "400px" }}
+      className={`w-full h-screen bg-gray-900 ${className}`}
+      style={{ height: "100vh", minHeight: "100%" }}
     />
   );
 }
