@@ -66,10 +66,16 @@ if ('serviceWorker' in navigator) {
   });
 }
 
-createRoot(document.getElementById("root")!).render(
-  <trpc.Provider client={trpcClient} queryClient={queryClient}>
-    <QueryClientProvider client={queryClient}>
-      <App />
-    </QueryClientProvider>
-  </trpc.Provider>
-);
+const rootElement = document.getElementById("root");
+if (!rootElement) {
+  console.error("Root element not found!");
+  document.body.innerHTML = "<h1>Error: Root element not found</h1>";
+} else {
+  createRoot(rootElement).render(
+    <trpc.Provider client={trpcClient} queryClient={queryClient}>
+      <QueryClientProvider client={queryClient}>
+        <App />
+      </QueryClientProvider>
+    </trpc.Provider>
+  );
+}
