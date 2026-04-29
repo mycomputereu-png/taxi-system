@@ -461,14 +461,14 @@ export default function DriverApp() {
         const lat = pos.coords.latitude;
         const lng = pos.coords.longitude;
         map.setCenter({ lat, lng });
-        map.setZoom(14);
+        map.setZoom(16);
         setDriverPos({ lat, lng });
       },
       (error) => {
         console.warn("Geolocation error:", error);
         // Only set fallback after GPS fails
         map.setCenter({ lat: 44.4268, lng: 26.1025 });
-        map.setZoom(14);
+        map.setZoom(16);
       }
     );
   }, []);
