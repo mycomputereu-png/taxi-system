@@ -1,6 +1,7 @@
 
 import { TRPCError } from "@trpc/server";
 import bcrypt from "bcryptjs";
+import crypto from "crypto";
 import { nanoid } from "nanoid";
 import { z } from "zod";
 import {
@@ -95,7 +96,9 @@ export const appRouter = router({
       .mutation(async ({ input }) => {
         const driver = await getDriverByUsername(input.username);
         if (!driver) throw new TRPCError({ code: "UNAUTHORIZED", message: "Invalid credentials" });
-        const valid = await bcrypt.compare(input.password, driver.passwordHash);
+        // Use PBKDF2 for password verification (fixes hash truncation issue)
+        const hash = crypto.pbkdf2Sync(input.password, "taxibucovina", 100000, 64, "sha512").toString("hex");
+        const valid = hash === driver.passwordHash;
         if (!valid) throw new TRPCError({ code: "UNAUTHORIZED", message: "Invalid credentials" });
         const token = generateToken();
         const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);

@@ -1,5 +1,12 @@
 {
-	"appId": "com.mycomputereu.taxiclient",
-	"appName": "Taxi Client",
-	"webDir": "dist/public"
+	"appId": "taxibucovina.dispatcher",
+	"appName": "Dispatcher Taxi Bucovina",
+	"webDir": "dist/public",
+	"server": {
+		"url": "https://taxibucovina.eu",
+		"cleartext": false
+	},
+	"android": {
+		"allowMixedContent": false
+	}
 }

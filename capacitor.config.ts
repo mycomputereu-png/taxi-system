@@ -1,9 +1,16 @@
 import type { CapacitorConfig } from '@capacitor/cli';
 
 const config: CapacitorConfig = {
-  appId: 'com.mycomputereu.taxiclient',
-  appName: 'Taxi Client',
-  webDir: 'dist/public'
+  appId: 'taxibucovina.dispatcher',
+  appName: 'Dispatcher Taxi Bucovina',
+  webDir: 'dist/public',
+  server: {
+    url: 'https://taxibucovina.eu',
+    cleartext: false
+  },
+  android: {
+    allowMixedContent: false
+  }
 };
 
 export default config;
