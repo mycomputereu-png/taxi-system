@@ -311,7 +311,7 @@ export default function DriverApp() {
       s.disconnect();
       socketRef.current = null;
     };
-  }, [session]);
+  }, [session, rideAccepted, activeRide, driverPos]);
 
   // GPS tracking
   useEffect(() => {
@@ -341,7 +341,7 @@ export default function DriverApp() {
         navigator.geolocation.clearWatch(locationWatchRef.current);
       }
     };
-  }, [session]);
+  }, [session, rideAccepted, activeRide]);
 
   // Countdown timer for ride acceptance
   useEffect(() => {

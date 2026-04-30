@@ -327,10 +327,9 @@ export default function Dispatcher() {
         const infoWindow = new google.maps.InfoWindow();
         marker.addListener("click", () => {
           const statusColor = d.status === "available" ? "#22c55e" : "#f59e0b";
-          const displayName = d.name || d.username || `Driver ${d.id}`;
           infoWindow.setContent(
             `<div style="background:#1f2937;color:#fff;padding:12px;border-radius:8px;font-family:Arial,sans-serif;">
-              <div style="font-weight:bold;font-size:14px;margin-bottom:4px;">${displayName}</div>
+              <div style="font-weight:bold;font-size:14px;margin-bottom:4px;">${d.name}</div>
               <div style="font-size:12px;color:#9ca3af;margin-bottom:6px;">ID: ${d.id}</div>
               <div style="display:inline-block;padding:4px 8px;background:${statusColor};color:#fff;border-radius:4px;font-size:11px;font-weight:bold;">${d.status.toUpperCase()}</div>
             </div>`
@@ -414,7 +413,7 @@ export default function Dispatcher() {
     setMapReady(true);
     // Set initial view to Bucharest
     map.setCenter({ lat: 44.4268, lng: 26.1025 });
-    map.setZoom(11);
+    map.setZoom(13);
     console.log("[Dispatcher] Map initialized and centered");
     // Add map styles for better visibility
     map.setOptions({
