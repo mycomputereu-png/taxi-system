@@ -414,7 +414,7 @@ export default function Dispatcher() {
     setMapReady(true);
     // Set initial view to Bucharest
     map.setCenter({ lat: 44.4268, lng: 26.1025 });
-    map.setZoom(13);
+    map.setZoom(14);
     console.log("[Dispatcher] Map initialized and centered");
     // Add map styles for better visibility
     map.setOptions({
