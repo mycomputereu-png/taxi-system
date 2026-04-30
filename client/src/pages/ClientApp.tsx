@@ -482,7 +482,7 @@ export default function ClientApp() {
     // Center on client position if available
     if (clientPos) {
       map.setCenter({ lat: clientPos.lat, lng: clientPos.lng });
-      map.setZoom(17);
+      map.setZoom(15);
       updateClientMarker(clientPos.lat, clientPos.lng);
     } else {
       // Try to center on user location - don't set fallback center yet
@@ -491,7 +491,7 @@ export default function ClientApp() {
           const lat = pos.coords.latitude;
           const lng = pos.coords.longitude;
           map.setCenter({ lat, lng });
-          map.setZoom(17);
+          map.setZoom(15);
           setClientPos({ lat, lng });
           updateClientMarker(lat, lng);
         },
@@ -499,7 +499,7 @@ export default function ClientApp() {
           console.warn("Geolocation error:", error);
           // Only set fallback after GPS fails
           map.setCenter({ lat: 44.4268, lng: 26.1025 });
-          map.setZoom(17);
+          map.setZoom(13);
         }
       );
     }

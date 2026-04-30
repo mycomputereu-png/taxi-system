@@ -387,13 +387,13 @@ export default function Dispatcher() {
       }
       marker.setPosition({ lat: c.lat, lng: c.lng });
     });
-    // Fit bounds to show all markers - disabled to preserve zoom level
-    // if ((driverLocations.size > 0 || clientLocations.size > 0) && mapRef.current) {
-    //   const bounds = new google.maps.LatLngBounds();
-    //   driverLocations.forEach((d) => bounds.extend({ lat: d.lat, lng: d.lng }));
-    //   clientLocations.forEach((c) => bounds.extend({ lat: c.lat, lng: c.lng }));
-    //   mapRef.current.fitBounds(bounds, 100);
-    // }
+    // Fit bounds to show all markers
+    if ((driverLocations.size > 0 || clientLocations.size > 0) && mapRef.current) {
+      const bounds = new google.maps.LatLngBounds();
+      driverLocations.forEach((d) => bounds.extend({ lat: d.lat, lng: d.lng }));
+      clientLocations.forEach((c) => bounds.extend({ lat: c.lat, lng: c.lng }));
+      mapRef.current.fitBounds(bounds, 100);
+    }
   }, [mapReady, driverLocations, clientLocations]);
 
   // Listen for assign from map popup
@@ -413,7 +413,7 @@ export default function Dispatcher() {
     setMapReady(true);
     // Set initial view to Bucharest
     map.setCenter({ lat: 44.4268, lng: 26.1025 });
-    map.setZoom(12);
+    map.setZoom(13);
     console.log("[Dispatcher] Map initialized and centered");
     // Add map styles for better visibility
     map.setOptions({
@@ -953,7 +953,7 @@ export default function Dispatcher() {
 
         {/* Map */}
         <div className="flex-1 relative flex flex-col">
-          <MapView initialZoom={12} onMapReady={handleMapReady} className="flex-1 w-full" />
+          <MapView onMapReady={handleMapReady} className="flex-1 w-full" />
 
           {/* Map Legend */}
           <div className="absolute top-4 right-4 bg-gray-900 bg-opacity-90 rounded-lg p-3 text-xs text-white border border-gray-700">

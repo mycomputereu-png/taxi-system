@@ -94,23 +94,12 @@ export const appRouter = router({
     login: publicProcedure
       .input(z.object({ username: z.string(), password: z.string() }))
       .mutation(async ({ input }) => {
-        console.log(`[Driver Login] Attempting login for username: ${input.username}`);
         const driver = await getDriverByUsername(input.username);
-        if (!driver) {
-          console.log(`[Driver Login] Driver not found: ${input.username}`);
-          throw new TRPCError({ code: "UNAUTHORIZED", message: "Invalid credentials" });
-        }
-        console.log(`[Driver Login] Driver found: ${driver.username}, ID: ${driver.id}`);
+        if (!driver) throw new TRPCError({ code: "UNAUTHORIZED", message: "Invalid credentials" });
         // Use PBKDF2 for password verification (fixes hash truncation issue)
         const hash = crypto.pbkdf2Sync(input.password, "taxibucovina", 100000, 64, "sha512").toString("hex");
-        console.log(`[Driver Login] Calculated hash: ${hash.substring(0, 50)}...`);
-        console.log(`[Driver Login] Database hash:   ${driver.passwordHash.substring(0, 50)}...`);
         const valid = hash === driver.passwordHash;
-        console.log(`[Driver Login] Hash match: ${valid}`);
-        if (!valid) {
-          console.log(`[Driver Login] Password mismatch for ${input.username}`);
-          throw new TRPCError({ code: "UNAUTHORIZED", message: "Invalid credentials" });
-        }
+        if (!valid) throw new TRPCError({ code: "UNAUTHORIZED", message: "Invalid credentials" });
         const token = generateToken();
         const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
         await createDriverSession(driver.id, token, expiresAt);
