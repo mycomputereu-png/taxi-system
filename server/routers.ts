@@ -474,7 +474,8 @@ export const appRouter = router({
         })
       )
       .mutation(async ({ input }) => {
-        const hash = await bcrypt.hash(input.password, 10);
+        // Use PBKDF2 for password hashing (same as driver login)
+        const hash = crypto.pbkdf2Sync(input.password, "taxibucovina", 100000, 64, "sha512").toString("hex");
         await createDriver({
           username: input.username,
           passwordHash: hash,
