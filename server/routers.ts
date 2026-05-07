@@ -1,7 +1,7 @@
 
 import { TRPCError } from "@trpc/server";
 import bcrypt from "bcryptjs";
-import crypto from "crypto";
+
 import { nanoid } from "nanoid";
 import { z } from "zod";
 import {
@@ -43,7 +43,7 @@ import {
   type ActiveRide,
 } from "./db";
 import { getSessionCookieOptions } from "./_core/cookies";
-const COOKIE_NAME = "session";
+import { COOKIE_NAME } from "../shared/const";
 import { systemRouter } from "./_core/systemRouter";
 import { protectedProcedure, publicProcedure, router } from "./_core/trpc";
 import { emitToClient, emitToDispatchers, emitToDriver, setRideAcceptanceTimeout, clearRideAcceptanceTimeout } from "./socket";
@@ -68,7 +68,7 @@ export const appRouter = router({
     me: publicProcedure.query((opts) => opts.ctx.user),
     logout: publicProcedure.mutation(({ ctx }) => {
       const cookieOptions = getSessionCookieOptions(ctx.req);
-      ctx.res.clearCookie("session", { ...cookieOptions, maxAge: -1 });
+      ctx.res.clearCookie(COOKIE_NAME, { ...cookieOptions, maxAge: -1 });
       return { success: true } as const;
     }),
     updateClientName: publicProcedure
@@ -96,15 +96,14 @@ export const appRouter = router({
       .mutation(async ({ input }) => {
         const driver = await getDriverByUsername(input.username);
         if (!driver) throw new TRPCError({ code: "UNAUTHORIZED", message: "Invalid credentials" });
-        // Use PBKDF2 for password verification (fixes hash truncation issue)
-        const hash = crypto.pbkdf2Sync(input.password, "taxibucovina", 100000, 64, "sha512").toString("hex");
-        const valid = hash === driver.passwordHash;
+        const valid = await bcrypt.compare(input.password, driver.passwordHash);
         if (!valid) throw new TRPCError({ code: "UNAUTHORIZED", message: "Invalid credentials" });
         const token = generateToken();
         const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
         await createDriverSession(driver.id, token, expiresAt);
         await updateDriverStatus(driver.id, "available");
-        return { token, driver };
+        const { passwordHash: _, ...safeDriver } = driver;
+        return { token, driver: safeDriver };
       }),
 
     logout: publicProcedure
