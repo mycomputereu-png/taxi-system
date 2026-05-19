@@ -10,7 +10,6 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
-import { getLoginUrl } from "@/const";
 import { useSocket, getSocket } from "@/hooks/useSocket";
 import { DriverDetailsModal } from "@/components/DriverDetailsModal";
 import {
@@ -76,8 +75,19 @@ type RideWithClientDriver = {
 };
 
 export default function Dispatcher() {
-  const { user, loading, isAuthenticated, logout } = useAuth();
+  const { user, loading, isAuthenticated, logout, refresh } = useAuth();
   const { emit, on, socket: socketRef } = useSocket();
+
+  const [loginEmail, setLoginEmail] = useState("");
+  const [loginPassword, setLoginPassword] = useState("");
+  const [loginError, setLoginError] = useState("");
+  const loginMut = trpc.auth.dispatcherLogin.useMutation({
+    onSuccess: () => {
+      setLoginError("");
+      refresh();
+    },
+    onError: (err) => setLoginError(err.message),
+  });
 
   const [mapReady, setMapReady] = useState(false);
   const mapRef = useRef<L.Map | null>(null);
@@ -395,12 +405,38 @@ export default function Dispatcher() {
           </CardHeader>
           <CardContent className="flex flex-col gap-4">
             <p className="text-gray-400 text-center">Autentifică-te pentru a accesa panoul de dispatcher</p>
-            <Button
-              className="w-full bg-yellow-500 hover:bg-yellow-600 text-black font-bold"
-              onClick={() => (window.location.href = getLoginUrl())}
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                loginMut.mutate({ email: loginEmail, password: loginPassword });
+              }}
+              className="flex flex-col gap-3"
             >
-              Autentificare Dispatcher
-            </Button>
+              <Input
+                type="email"
+                placeholder="Email"
+                value={loginEmail}
+                onChange={(e) => setLoginEmail(e.target.value)}
+                className="bg-gray-800 border-gray-600 text-white"
+                required
+              />
+              <Input
+                type="password"
+                placeholder="Parolă"
+                value={loginPassword}
+                onChange={(e) => setLoginPassword(e.target.value)}
+                className="bg-gray-800 border-gray-600 text-white"
+                required
+              />
+              {loginError && <p className="text-red-400 text-sm text-center">{loginError}</p>}
+              <Button
+                type="submit"
+                className="w-full bg-yellow-500 hover:bg-yellow-600 text-black font-bold"
+                disabled={loginMut.isPending}
+              >
+                {loginMut.isPending ? "Se autentifică..." : "Autentificare Dispatcher"}
+              </Button>
+            </form>
           </CardContent>
         </Card>
       </div>

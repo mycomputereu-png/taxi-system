@@ -166,6 +166,13 @@ export async function getUserByOpenId(openId: string) {
   return result[0];
 }
 
+export async function getUserByEmail(email: string) {
+  const db = await getDb();
+  if (!db) return undefined;
+  const result = await db.select().from(users).where(eq(users.email, email)).limit(1);
+  return result[0];
+}
+
 // ─── Drivers ─────────────────────────────────────────────────────────────────
 
 export async function createDriver(data: InsertDriver): Promise<void> {

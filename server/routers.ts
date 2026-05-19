@@ -32,6 +32,7 @@ import {
   upsertClient,
   upsertUser,
   getUserByOpenId,
+  getUserByEmail,
   submitClientRating,
   getAllClientsWithRatings,
   getClientProfile,
@@ -43,7 +44,8 @@ import {
   type ActiveRide,
 } from "./db";
 import { getSessionCookieOptions } from "./_core/cookies";
-import { COOKIE_NAME } from "../shared/const";
+import { COOKIE_NAME, ONE_YEAR_MS } from "../shared/const";
+import { sdk } from "./_core/sdk";
 import { systemRouter } from "./_core/systemRouter";
 import { protectedProcedure, publicProcedure, router } from "./_core/trpc";
 import { emitToClient, emitToDispatchers, emitToDriver, setRideAcceptanceTimeout, clearRideAcceptanceTimeout } from "./socket";
@@ -63,7 +65,7 @@ function generateOtpCode() {
 export const appRouter = router({
   system: systemRouter,
 
-  // ─── Manus OAuth (Dispatcher) ───────────────────────────────────────────────
+  // ─── Dispatcher Auth (Email/Password) ─────────────────────────────────────
   auth: router({
     me: publicProcedure.query((opts) => opts.ctx.user),
     logout: publicProcedure.mutation(({ ctx }) => {
@@ -71,6 +73,26 @@ export const appRouter = router({
       ctx.res.clearCookie(COOKIE_NAME, { ...cookieOptions, maxAge: -1 });
       return { success: true } as const;
     }),
+    dispatcherLogin: publicProcedure
+      .input(z.object({ email: z.string().email(), password: z.string() }))
+      .mutation(async ({ input, ctx }) => {
+        const user = await getUserByEmail(input.email);
+        if (!user || !user.passwordHash) {
+          throw new TRPCError({ code: "UNAUTHORIZED", message: "Email sau parolă incorectă" });
+        }
+        const valid = await bcrypt.compare(input.password, user.passwordHash);
+        if (!valid) {
+          throw new TRPCError({ code: "UNAUTHORIZED", message: "Email sau parolă incorectă" });
+        }
+        const sessionToken = await sdk.createSessionToken(user.openId, {
+          name: user.name || "",
+          expiresInMs: ONE_YEAR_MS,
+        });
+        const cookieOptions = getSessionCookieOptions(ctx.req);
+        ctx.res.cookie(COOKIE_NAME, sessionToken, { ...cookieOptions, maxAge: ONE_YEAR_MS });
+        await upsertUser({ openId: user.openId, lastSignedIn: new Date() });
+        return { success: true, name: user.name };
+      }),
     updateClientName: publicProcedure
       .input(z.object({ token: z.string(), name: z.string() }))
       .mutation(async ({ input }) => {
