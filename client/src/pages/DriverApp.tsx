@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, useCallback } from "react";
+import L from "leaflet";
 import { trpc } from "@/lib/trpc";
-import { MapView } from "@/components/Map";
+import { MapView, createSvgIcon, fetchOSRMRoute } from "@/components/Map";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -90,10 +91,10 @@ export default function DriverApp() {
 
   // Map
   const [mapReady, setMapReady] = useState(false);
-  const mapRef = useRef<google.maps.Map | null>(null);
-  const driverMarkerRef = useRef<google.maps.Marker | null>(null);
-  const clientMarkerRef = useRef<google.maps.Marker | null>(null);
-  const directionsRendererRef = useRef<google.maps.DirectionsRenderer | null>(null);
+  const mapRef = useRef<L.Map | null>(null);
+  const driverMarkerRef = useRef<L.Marker | null>(null);
+  const clientMarkerRef = useRef<L.Marker | null>(null);
+  const routePolylineRef = useRef<L.Polyline | null>(null);
   const locationWatchRef = useRef<number | null>(null);
   const socketRef = useRef<any>(null);
   const [driverPos, setDriverPos] = useState<{ lat: number; lng: number } | null>(null);
@@ -296,14 +297,12 @@ export default function DriverApp() {
     s.on("client:location:update", (data: { clientId: number; lat: number; lng: number }) => {
       // Update client location on map when tracking
       if (rideAccepted && activeRide && activeRide.clientId === data.clientId) {
-        if (mapRef.current && clientMarkerRef.current) {
-          clientMarkerRef.current.setPosition({ lat: data.lat, lng: data.lng });
-          // Update route
-          if (driverPos) {
-            drawRouteToClient(driverPos, { lat: data.lat, lng: data.lng });
-            calculateETA(driverPos, { lat: data.lat, lng: data.lng });
+          if (mapRef.current && clientMarkerRef.current) {
+            clientMarkerRef.current.setLatLng([data.lat, data.lng]);
+            if (driverPos) {
+              drawRouteToClient(driverPos, { lat: data.lat, lng: data.lng });
+            }
           }
-        }
       }
     });
 
@@ -363,112 +362,80 @@ export default function DriverApp() {
   const updateDriverMarker = useCallback((lat: number, lng: number) => {
     if (!mapRef.current) return;
     if (!driverMarkerRef.current) {
-      driverMarkerRef.current = new google.maps.Marker({
-        map: mapRef.current,
-        icon: {
-          path: google.maps.SymbolPath.FORWARD_CLOSED_ARROW,
-          scale: 8,
-          fillColor: "#f59e0b",
-          fillOpacity: 1,
-          strokeColor: "#fff",
-          strokeWeight: 2,
-        },
+      driverMarkerRef.current = L.marker([lat, lng], {
+        icon: createSvgIcon("#f59e0b", "arrow"),
         title: "Locația mea",
-        zIndex: 200,
-      });
+        zIndexOffset: 200,
+      }).addTo(mapRef.current);
     }
-    driverMarkerRef.current.setPosition({ lat, lng });
-    mapRef.current.panTo({ lat, lng });
+    driverMarkerRef.current.setLatLng([lat, lng]);
+    mapRef.current.panTo([lat, lng]);
   }, []);
 
-  const drawRouteToClient = useCallback((from: { lat: number; lng: number }, to: { lat: number; lng: number }) => {
+  const drawRouteToClient = useCallback(async (from: { lat: number; lng: number }, to: { lat: number; lng: number }) => {
     if (!mapRef.current) return;
-    if (!directionsRendererRef.current) {
-      directionsRendererRef.current = new google.maps.DirectionsRenderer({
-        map: mapRef.current,
-        suppressMarkers: true,
-        polylineOptions: {
-          strokeColor: "#3b82f6",
-          strokeWeight: 6,
-          strokeOpacity: 0.9,
-        },
-      });
-    }
     // Client marker
     if (!clientMarkerRef.current) {
-      clientMarkerRef.current = new google.maps.Marker({
-        map: mapRef.current,
-        icon: {
-          path: google.maps.SymbolPath.CIRCLE,
-          scale: 10,
-          fillColor: "#ef4444",
-          fillOpacity: 1,
-          strokeColor: "#fff",
-          strokeWeight: 3,
-        },
+      clientMarkerRef.current = L.marker([to.lat, to.lng], {
+        icon: createSvgIcon("#ef4444", "circle"),
         title: "Locația clientului",
-        zIndex: 100,
-      });
+        zIndexOffset: 100,
+      }).addTo(mapRef.current);
     }
-    clientMarkerRef.current.setPosition(to);
+    clientMarkerRef.current.setLatLng([to.lat, to.lng]);
 
-    const service = new google.maps.DirectionsService();
-    service.route(
-      { origin: from, destination: to, travelMode: google.maps.TravelMode.DRIVING },
-      (result, status) => {
-        if (status === "OK" && result) {
-          directionsRendererRef.current!.setDirections(result);
-          // Fit bounds
-          const bounds = new google.maps.LatLngBounds();
-          bounds.extend(from);
-          bounds.extend(to);
-          mapRef.current?.fitBounds(bounds, 80);
-        }
+    const route = await fetchOSRMRoute(from, to);
+    if (route && mapRef.current) {
+      if (routePolylineRef.current) {
+        routePolylineRef.current.remove();
       }
-    );
+      routePolylineRef.current = L.polyline(route.coordinates, {
+        color: "#3b82f6",
+        weight: 6,
+        opacity: 0.9,
+      }).addTo(mapRef.current);
+      // Update ETA from route
+      const minutes = Math.ceil(route.duration / 60);
+      setEstimatedArrival(minutes);
+      // Fit bounds
+      const bounds = L.latLngBounds([from.lat, from.lng], [to.lat, to.lng]);
+      mapRef.current.fitBounds(bounds, { padding: [80, 80] });
+    }
   }, []);
 
-  const calculateETA = useCallback((from: { lat: number; lng: number }, to: { lat: number; lng: number }) => {
-    const service = new google.maps.DistanceMatrixService();
-    service.getDistanceMatrix(
-      { origins: [from], destinations: [to], travelMode: google.maps.TravelMode.DRIVING },
-      (result, status) => {
-        if (status === "OK" && result?.rows[0]?.elements[0]?.duration) {
-          const minutes = Math.ceil(result.rows[0].elements[0].duration.value / 60);
-          setEstimatedArrival(minutes);
-        }
-      }
-    );
+  const calculateETA = useCallback(async (from: { lat: number; lng: number }, to: { lat: number; lng: number }) => {
+    const route = await fetchOSRMRoute(from, to);
+    if (route) {
+      const minutes = Math.ceil(route.duration / 60);
+      setEstimatedArrival(minutes);
+    }
   }, []);
 
   const clearDirections = useCallback(() => {
-    if (directionsRendererRef.current) {
-      directionsRendererRef.current.setMap(null);
-      directionsRendererRef.current = null;
+    if (routePolylineRef.current) {
+      routePolylineRef.current.remove();
+      routePolylineRef.current = null;
     }
     if (clientMarkerRef.current) {
-      clientMarkerRef.current.setMap(null);
+      clientMarkerRef.current.remove();
       clientMarkerRef.current = null;
     }
     setEstimatedArrival(null);
   }, []);
 
-  const handleMapReady = useCallback((map: google.maps.Map) => {
+  const handleMapReady = useCallback((map: L.Map) => {
     mapRef.current = map;
     setMapReady(true);
     navigator.geolocation?.getCurrentPosition(
       (pos) => {
         const lat = pos.coords.latitude;
         const lng = pos.coords.longitude;
-        map.setCenter({ lat, lng });
-        map.setZoom(15);
+        map.setView([lat, lng], 15);
         setDriverPos({ lat, lng });
       },
       (error) => {
         console.warn("Geolocation error:", error);
-        // Only set fallback after GPS fails
-        map.setCenter({ lat: 44.4268, lng: 26.1025 });
-        map.setZoom(13);
+        map.setView([44.4268, 26.1025], 13);
       }
     );
   }, []);

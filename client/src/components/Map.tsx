@@ -1,191 +1,139 @@
 /**
- * GOOGLE MAPS FRONTEND INTEGRATION - ESSENTIAL GUIDE
+ * LEAFLET + OPENSTREETMAP MAP INTEGRATION (FREE, NO API KEY NEEDED)
+ *
+ * Replaces Google Maps with Leaflet + OpenStreetMap tiles.
+ * Uses OSRM (Open Source Routing Machine) for directions/routing.
  *
  * USAGE FROM PARENT COMPONENT:
  * ======
- *
- * const mapRef = useRef<google.maps.Map | null>(null);
+ * const mapRef = useRef<L.Map | null>(null);
  *
  * <MapView
  *   initialCenter={{ lat: 40.7128, lng: -74.0060 }}
  *   initialZoom={15}
- *   onMapReady={(map) => {
- *     mapRef.current = map; // Store to control map from parent anytime, google map itself is in charge of the re-rendering, not react state.
- * </MapView>
- *
- * ======
- * Available Libraries and Core Features:
- * -------------------------------
- * 📍 MARKER (from `marker` library)
- * - Attaches to map using { map, position }
- * new google.maps.marker.AdvancedMarkerElement({
- *   map,
- *   position: { lat: 37.7749, lng: -122.4194 },
- *   title: "San Francisco",
- * });
- *
- * -------------------------------
- * 🏢 PLACES (from `places` library)
- * - Does not attach directly to map; use data with your map manually.
- * const place = new google.maps.places.Place({ id: PLACE_ID });
- * await place.fetchFields({ fields: ["displayName", "location"] });
- * map.setCenter(place.location);
- * new google.maps.marker.AdvancedMarkerElement({ map, position: place.location });
- *
- * -------------------------------
- * 🧭 GEOCODER (from `geocoding` library)
- * - Standalone service; manually apply results to map.
- * const geocoder = new google.maps.Geocoder();
- * geocoder.geocode({ address: "New York" }, (results, status) => {
- *   if (status === "OK" && results[0]) {
- *     map.setCenter(results[0].geometry.location);
- *     new google.maps.marker.AdvancedMarkerElement({
- *       map,
- *       position: results[0].geometry.location,
- *     });
- *   }
- * });
- *
- * -------------------------------
- * 📐 GEOMETRY (from `geometry` library)
- * - Pure utility functions; not attached to map.
- * const dist = google.maps.geometry.spherical.computeDistanceBetween(p1, p2);
- *
- * -------------------------------
- * 🛣️ ROUTES (from `routes` library)
- * - Combines DirectionsService (standalone) + DirectionsRenderer (map-attached)
- * const directionsService = new google.maps.DirectionsService();
- * const directionsRenderer = new google.maps.DirectionsRenderer({ map });
- * directionsService.route(
- *   { origin, destination, travelMode: "DRIVING" },
- *   (res, status) => status === "OK" && directionsRenderer.setDirections(res)
- * );
- *
- * -------------------------------
- * 🌦️ MAP LAYERS (attach directly to map)
- * - new google.maps.TrafficLayer().setMap(map);
- * - new google.maps.TransitLayer().setMap(map);
- * - new google.maps.BicyclingLayer().setMap(map);
- *
- * -------------------------------
- * ✅ SUMMARY
- * - "map-attached" → AdvancedMarkerElement, DirectionsRenderer, Layers.
- * - "standalone" → Geocoder, DirectionsService, DistanceMatrixService, ElevationService.
- * - "data-only" → Place, Geometry utilities.
+ *   onMapReady={(map) => { mapRef.current = map; }}
+ * />
  */
 
-/// <reference types="@types/google.maps" />
-
+import L from "leaflet";
 import { useEffect, useRef } from "react";
 import { usePersistFn } from "@/hooks/usePersistFn";
 import { cn } from "@/lib/utils";
 
-declare global {
-  interface Window {
-    google?: typeof google;
-  }
+// Inject Leaflet CSS once
+let leafletCssLoaded = false;
+function ensureLeafletCss() {
+  if (leafletCssLoaded) return;
+  leafletCssLoaded = true;
+  const link = document.createElement("link");
+  link.rel = "stylesheet";
+  link.href = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.css";
+  link.crossOrigin = "";
+  document.head.appendChild(link);
 }
 
-const API_KEY = import.meta.env.VITE_FRONTEND_FORGE_API_KEY;
-const FORGE_BASE_URL =
-  import.meta.env.VITE_FRONTEND_FORGE_API_URL ||
-  "https://forge.butterfly-effect.dev";
-const MAPS_PROXY_URL = `${FORGE_BASE_URL}/v1/maps/proxy`;
+// Fix default marker icon paths (Leaflet bundler issue)
+delete (L.Icon.Default.prototype as any)._getIconUrl;
+L.Icon.Default.mergeOptions({
+  iconRetinaUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png",
+  iconUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png",
+  shadowUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
+});
 
-let mapScriptPromise: Promise<void> | null = null;
-
-function loadMapScript(): Promise<void> {
-  // Idempotent: if already loading or loaded, return existing promise
-  if (mapScriptPromise) {
-    return mapScriptPromise;
+/** Create an SVG DivIcon for markers */
+export function createSvgIcon(color: string, shape: "arrow" | "circle", size: number = 24): L.DivIcon {
+  let svg: string;
+  if (shape === "arrow") {
+    svg = `<svg width="${size}" height="${size}" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+      <polygon points="12,2 22,22 12,17 2,22" fill="${color}" stroke="#fff" stroke-width="2"/>
+    </svg>`;
+  } else {
+    svg = `<svg width="${size}" height="${size}" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+      <circle cx="12" cy="12" r="10" fill="${color}" stroke="#fff" stroke-width="3"/>
+    </svg>`;
   }
-
-  // If Google Maps already loaded, resolve immediately
-  if (window.google?.maps) {
-    return Promise.resolve();
-  }
-
-  mapScriptPromise = new Promise((resolve, reject) => {
-    const script = document.createElement("script");
-    script.src = `${MAPS_PROXY_URL}/maps/api/js?key=${API_KEY}&v=weekly&libraries=marker,places,geocoding,geometry`;
-    script.async = true;
-    script.crossOrigin = "anonymous";
-    script.onload = () => {
-      // Verify Google Maps is available
-      if (window.google?.maps) {
-        resolve();
-      } else {
-        reject(new Error("Google Maps API loaded but window.google.maps not available"));
-      }
-      // DO NOT remove script - Google Maps needs it to remain
-    };
-    script.onerror = () => {
-      console.error("Failed to load Google Maps script");
-      reject(new Error("Failed to load Google Maps script"));
-    };
-    document.head.appendChild(script);
+  return L.divIcon({
+    html: svg,
+    className: "",
+    iconSize: [size, size],
+    iconAnchor: [size / 2, size / 2],
   });
+}
 
-  return mapScriptPromise;
+/** Fetch a driving route from OSRM (free, no API key) */
+export async function fetchOSRMRoute(
+  from: { lat: number; lng: number },
+  to: { lat: number; lng: number }
+): Promise<{ coordinates: L.LatLngTuple[]; distance: number; duration: number } | null> {
+  try {
+    const url = `https://router.project-osrm.org/route/v1/driving/${from.lng},${from.lat};${to.lng},${to.lat}?overview=full&geometries=geojson`;
+    const res = await fetch(url);
+    const data = await res.json();
+    if (data.code === "Ok" && data.routes?.[0]) {
+      const route = data.routes[0];
+      const coords: L.LatLngTuple[] = route.geometry.coordinates.map(
+        (c: [number, number]) => [c[1], c[0]] as L.LatLngTuple
+      );
+      return {
+        coordinates: coords,
+        distance: route.distance,
+        duration: route.duration,
+      };
+    }
+  } catch (e) {
+    console.error("[OSRM] Route fetch error:", e);
+  }
+  return null;
 }
 
 interface MapViewProps {
   className?: string;
-  initialCenter?: google.maps.LatLngLiteral;
+  initialCenter?: { lat: number; lng: number };
   initialZoom?: number;
-  onMapReady?: (map: google.maps.Map) => void;
+  onMapReady?: (map: L.Map) => void;
 }
 
 export function MapView({
   className,
-  initialCenter = { lat: 0, lng: 0 },
+  initialCenter = { lat: 44.4268, lng: 26.1025 },
   initialZoom = 12,
   onMapReady,
 }: MapViewProps) {
   const mapContainer = useRef<HTMLDivElement>(null);
-  const map = useRef<google.maps.Map | null>(null);
+  const mapInstance = useRef<L.Map | null>(null);
 
   const init = usePersistFn(async () => {
     try {
-      console.log("[Map] Initializing MapView...");
-      await loadMapScript();
-      console.log("[Map] Google Maps script loaded");
-      
-      if (!mapContainer.current) {
-        console.error("[Map] Container not found");
-        return;
-      }
-      
+      ensureLeafletCss();
+      if (!mapContainer.current) return;
+
       // Wait for container to have dimensions
       let attempts = 0;
       while (mapContainer.current.offsetHeight === 0 && attempts < 50) {
         await new Promise(resolve => setTimeout(resolve, 50));
         attempts++;
       }
-      
-      const rect = mapContainer.current.getBoundingClientRect();
-      console.log("[Map] Container dimensions:", { width: rect.width, height: rect.height, offsetWidth: mapContainer.current.offsetWidth, offsetHeight: mapContainer.current.offsetHeight, attempts });
-      
-      if (!window.google?.maps) {
-        console.error("[Map] Google Maps API not available after loading script");
-        return;
-      }
-      
-      console.log("[Map] Creating map instance...");
-      map.current = new window.google.maps.Map(mapContainer.current, {
+
+      if (mapInstance.current) return;
+
+      const map = L.map(mapContainer.current, {
+        center: [initialCenter.lat, initialCenter.lng],
         zoom: initialZoom,
-        center: initialCenter,
-        mapTypeControl: true,
-        fullscreenControl: true,
         zoomControl: true,
-        streetViewControl: true,
-        mapId: "DEMO_MAP_ID",
       });
-      console.log("[Map] Map instance created successfully");
-      
+
+      // Dark tile layer (CartoDB Dark Matter) matching dark theme
+      L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/">CARTO</a>',
+        subdomains: "abcd",
+        maxZoom: 20,
+      }).addTo(map);
+
+      mapInstance.current = map;
+      setTimeout(() => map.invalidateSize(), 100);
+
       if (onMapReady) {
-        console.log("[Map] Calling onMapReady callback");
-        onMapReady(map.current);
+        onMapReady(map);
       }
     } catch (error) {
       console.error("[Map] Failed to initialize map:", error);
@@ -194,6 +142,12 @@ export function MapView({
 
   useEffect(() => {
     init();
+    return () => {
+      if (mapInstance.current) {
+        mapInstance.current.remove();
+        mapInstance.current = null;
+      }
+    };
   }, [init]);
 
   return (
