@@ -298,6 +298,12 @@ export const appRouter = router({
           rating: input.rating,
           comment: input.comment,
         });
+        emitToDispatchers("client:rated", {
+          clientId: input.clientId,
+          driverId: driver.id,
+          rideId: input.rideId,
+          rating: input.rating,
+        });
         return { success: true };
       }),
     updateClientName: publicProcedure

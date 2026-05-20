@@ -535,7 +535,7 @@ export default function DriverApp() {
       </header>
 
       {/* Map */}
-      <div className="flex-1 relative bg-gray-800 overflow-hidden">
+      <div className="flex-1 relative bg-gray-800 overflow-hidden" style={{ isolation: "isolate" }}>
         <MapView onMapReady={handleMapReady} className="w-full h-full" />
 
         {/* Map Legend */}
