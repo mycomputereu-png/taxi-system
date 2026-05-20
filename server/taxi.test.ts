@@ -40,6 +40,8 @@ vi.mock("./socket", () => ({
   emitToDispatchers: vi.fn(),
   emitToDriver: vi.fn(),
   emitToClient: vi.fn(),
+  setRideAcceptanceTimeout: vi.fn(),
+  clearRideAcceptanceTimeout: vi.fn(),
 }));
 
 vi.mock("bcryptjs", () => ({

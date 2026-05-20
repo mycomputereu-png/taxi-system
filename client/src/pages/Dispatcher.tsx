@@ -1,7 +1,8 @@
 import { useState, useRef, useEffect, useCallback } from "react";
+import L from "leaflet";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { trpc } from "@/lib/trpc";
-import { MapView } from "@/components/Map";
+import { MapView, createSvgIcon } from "@/components/Map";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -9,7 +10,6 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
-import { getLoginUrl } from "@/const";
 import { useSocket, getSocket } from "@/hooks/useSocket";
 import { DriverDetailsModal } from "@/components/DriverDetailsModal";
 import {
@@ -23,7 +23,7 @@ type DriverMarker = {
   lat: number;
   lng: number;
   status: string;
-  marker?: google.maps.Marker;
+  marker?: L.Marker;
 };
 
 type ClientMarker = {
@@ -33,7 +33,7 @@ type ClientMarker = {
   name?: string;
   lat: number;
   lng: number;
-  marker?: google.maps.Marker;
+  marker?: L.Marker;
 };
 
 type RideWithClientDriver = {
@@ -75,13 +75,24 @@ type RideWithClientDriver = {
 };
 
 export default function Dispatcher() {
-  const { user, loading, isAuthenticated, logout } = useAuth();
+  const { user, loading, isAuthenticated, logout, refresh } = useAuth();
   const { emit, on, socket: socketRef } = useSocket();
 
+  const [loginEmail, setLoginEmail] = useState("");
+  const [loginPassword, setLoginPassword] = useState("");
+  const [loginError, setLoginError] = useState("");
+  const loginMut = trpc.auth.dispatcherLogin.useMutation({
+    onSuccess: () => {
+      setLoginError("");
+      refresh();
+    },
+    onError: (err) => setLoginError(err.message),
+  });
+
   const [mapReady, setMapReady] = useState(false);
-  const mapRef = useRef<google.maps.Map | null>(null);
-  const driverMarkersRef = useRef<Map<number, google.maps.Marker>>(new Map());
-  const clientMarkersRef = useRef<Map<number, google.maps.Marker>>(new Map());
+  const mapRef = useRef<L.Map | null>(null);
+  const driverMarkersRef = useRef<Map<number, L.Marker>>(new Map());
+  const clientMarkersRef = useRef<Map<number, L.Marker>>(new Map());
   const [driverLocations, setDriverLocations] = useState<Map<number, DriverMarker>>(new Map());
   const [clientLocations, setClientLocations] = useState<Map<number, ClientMarker>>(new Map());
   const [selectedRide, setSelectedRide] = useState<number | null>(null);
@@ -302,97 +313,61 @@ export default function Dispatcher() {
 
   // Update map markers
   useEffect(() => {
-    console.log("[Dispatcher] Map marker update effect triggered, mapReady:", mapReady, "driverLocations:", driverLocations.size);
     if (!mapReady || !mapRef.current) return;
 
     // Driver markers (green with arrow)
     driverLocations.forEach((d) => {
-      console.log("[Dispatcher] Rendering driver marker for driver", d.id, "at", d.lat, d.lng);
       let marker = driverMarkersRef.current.get(d.id);
+      const fillColor = d.status === "available" ? "#22c55e" : "#f59e0b";
       if (!marker) {
-        marker = new google.maps.Marker({
-          map: mapRef.current!,
-          icon: {
-            path: google.maps.SymbolPath.FORWARD_CLOSED_ARROW,
-            scale: 8,
-            fillColor: "#22c55e",
-            fillOpacity: 1,
-            strokeColor: "#fff",
-            strokeWeight: 2,
-          },
+        marker = L.marker([d.lat, d.lng], {
+          icon: createSvgIcon(fillColor, "arrow"),
           title: d.name,
-          zIndex: 100,
-          animation: google.maps.Animation.DROP,
-        });
-        const infoWindow = new google.maps.InfoWindow();
-        marker.addListener("click", () => {
-          const statusColor = d.status === "available" ? "#22c55e" : "#f59e0b";
-          infoWindow.setContent(
-            `<div style="background:#1f2937;color:#fff;padding:12px;border-radius:8px;font-family:Arial,sans-serif;">
-              <div style="font-weight:bold;font-size:14px;margin-bottom:4px;">${d.name}</div>
-              <div style="font-size:12px;color:#9ca3af;margin-bottom:6px;">ID: ${d.id}</div>
-              <div style="display:inline-block;padding:4px 8px;background:${statusColor};color:#fff;border-radius:4px;font-size:11px;font-weight:bold;">${d.status.toUpperCase()}</div>
-            </div>`
-          );
-          infoWindow.open(mapRef.current!, marker);
-        });
+          zIndexOffset: 100,
+        }).addTo(mapRef.current!);
+        const statusColor = d.status === "available" ? "#22c55e" : "#f59e0b";
+        marker.bindPopup(
+          `<div style="background:#1f2937;color:#fff;padding:12px;border-radius:8px;font-family:Arial,sans-serif;">
+            <div style="font-weight:bold;font-size:14px;margin-bottom:4px;">${d.name}</div>
+            <div style="font-size:12px;color:#9ca3af;margin-bottom:6px;">ID: ${d.id}</div>
+            <div style="display:inline-block;padding:4px 8px;background:${statusColor};color:#fff;border-radius:4px;font-size:11px;font-weight:bold;">${d.status.toUpperCase()}</div>
+          </div>`,
+          { className: "dark-popup" }
+        );
         driverMarkersRef.current.set(d.id, marker);
       }
-      marker.setPosition({ lat: d.lat, lng: d.lng });
-      // Update icon color based on status
-      const fillColor = d.status === "available" ? "#22c55e" : "#f59e0b";
-      marker.setIcon({
-        path: google.maps.SymbolPath.FORWARD_CLOSED_ARROW,
-        scale: 8,
-        fillColor: fillColor,
-        fillOpacity: 1,
-        strokeColor: "#fff",
-        strokeWeight: 2,
-      });
+      marker.setLatLng([d.lat, d.lng]);
+      marker.setIcon(createSvgIcon(fillColor, "arrow"));
     });
 
     // Client markers (red circle)
-    console.log("[Dispatcher] Rendering client markers, count:", clientLocations.size);
     clientLocations.forEach((c) => {
-      console.log("[Dispatcher] Processing client marker:", c);
       let marker = clientMarkersRef.current.get(c.id);
       if (!marker) {
-        marker = new google.maps.Marker({
-          map: mapRef.current!,
-          icon: {
-            path: google.maps.SymbolPath.CIRCLE,
-            scale: 10,
-            fillColor: "#ef4444",
-            fillOpacity: 1,
-            strokeColor: "#fff",
-            strokeWeight: 3,
-          },
+        marker = L.marker([c.lat, c.lng], {
+          icon: createSvgIcon("#ef4444", "circle"),
           title: c.phone,
-          zIndex: 50,
-          animation: google.maps.Animation.DROP,
-        });
-        const infoWindow = new google.maps.InfoWindow();
-        marker.addListener("click", () => {
-          infoWindow.setContent(
-            `<div style="background:#1f2937;color:#fff;padding:12px;border-radius:8px;font-family:Arial,sans-serif;">
-              <div style="font-weight:bold;font-size:14px;margin-bottom:4px;">${c.name || "Client"}</div>
-              <div style="font-size:12px;color:#9ca3af;margin-bottom:4px;">${c.phone}</div>
-              <div style="font-size:11px;color:#9ca3af;margin-bottom:6px;">Cursă #${c.rideId}</div>
-              <button onclick="window.dispatchEvent(new CustomEvent('assignRide', {detail: ${c.rideId}})" style="background:#3b82f6;color:white;padding:6px 12px;border:none;border-radius:4px;cursor:pointer;font-size:12px;font-weight:bold;width:100%;">Asignează</button>
-            </div>`
-          );
-          infoWindow.open(mapRef.current!, marker);
-        });
+          zIndexOffset: 50,
+        }).addTo(mapRef.current!);
+        marker.bindPopup(
+          `<div style="background:#1f2937;color:#fff;padding:12px;border-radius:8px;font-family:Arial,sans-serif;">
+            <div style="font-weight:bold;font-size:14px;margin-bottom:4px;">${c.name || "Client"}</div>
+            <div style="font-size:12px;color:#9ca3af;margin-bottom:4px;">${c.phone}</div>
+            <div style="font-size:11px;color:#9ca3af;margin-bottom:6px;">Cursă #${c.rideId}</div>
+            <button onclick="window.dispatchEvent(new CustomEvent('assignRide', {detail: ${c.rideId}}))" style="background:#3b82f6;color:white;padding:6px 12px;border:none;border-radius:4px;cursor:pointer;font-size:12px;font-weight:bold;width:100%;">Asignează</button>
+          </div>`,
+          { className: "dark-popup" }
+        );
         clientMarkersRef.current.set(c.id, marker);
       }
-      marker.setPosition({ lat: c.lat, lng: c.lng });
+      marker.setLatLng([c.lat, c.lng]);
     });
     // Fit bounds to show all markers
     if ((driverLocations.size > 0 || clientLocations.size > 0) && mapRef.current) {
-      const bounds = new google.maps.LatLngBounds();
-      driverLocations.forEach((d) => bounds.extend({ lat: d.lat, lng: d.lng }));
-      clientLocations.forEach((c) => bounds.extend({ lat: c.lat, lng: c.lng }));
-      mapRef.current.fitBounds(bounds, 100);
+      const bounds = L.latLngBounds([]);
+      driverLocations.forEach((d) => bounds.extend([d.lat, d.lng]));
+      clientLocations.forEach((c) => bounds.extend([c.lat, c.lng]));
+      mapRef.current.fitBounds(bounds, { padding: [100, 100] });
     }
   }, [mapReady, driverLocations, clientLocations]);
 
@@ -407,92 +382,10 @@ export default function Dispatcher() {
     return () => window.removeEventListener("assignRide", handler);
   }, []);
 
-  const handleMapReady = useCallback((map: google.maps.Map) => {
-    console.log("[Dispatcher] Map ready callback triggered");
+  const handleMapReady = useCallback((map: L.Map) => {
     mapRef.current = map;
     setMapReady(true);
-    // Set initial view to Bucharest
-    map.setCenter({ lat: 44.4268, lng: 26.1025 });
-    map.setZoom(13);
-    console.log("[Dispatcher] Map initialized and centered");
-    // Add map styles for better visibility
-    map.setOptions({
-      styles: [
-        { elementType: "geometry", stylers: [{ color: "#242f3e" }] },
-        { elementType: "labels.text.stroke", stylers: [{ color: "#242f3e" }] },
-        { elementType: "labels.text.fill", stylers: [{ color: "#746855" }] },
-        {
-          featureType: "administrative.locality",
-          elementType: "labels.text.fill",
-          stylers: [{ color: "#d59563" }],
-        },
-        {
-          featureType: "poi",
-          elementType: "labels.text.fill",
-          stylers: [{ color: "#d59563" }],
-        },
-        {
-          featureType: "poi.park",
-          elementType: "geometry",
-          stylers: [{ color: "#263c3f" }],
-        },
-        {
-          featureType: "poi.park",
-          elementType: "labels.text.fill",
-          stylers: [{ color: "#6b9080" }],
-        },
-        {
-          featureType: "road",
-          elementType: "geometry",
-          stylers: [{ color: "#38414e" }],
-        },
-        {
-          featureType: "road",
-          elementType: "geometry.stroke",
-          stylers: [{ color: "#212a37" }],
-        },
-        {
-          featureType: "road.highway",
-          elementType: "geometry",
-          stylers: [{ color: "#746855" }],
-        },
-        {
-          featureType: "road.highway",
-          elementType: "geometry.stroke",
-          stylers: [{ color: "#1f2835" }],
-        },
-        {
-          featureType: "road.highway",
-          elementType: "labels.text.fill",
-          stylers: [{ color: "#f3751ff" }],
-        },
-        {
-          featureType: "transit",
-          elementType: "geometry",
-          stylers: [{ color: "#2f3948" }],
-        },
-        {
-          featureType: "transit.station",
-          elementType: "labels.text.fill",
-          stylers: [{ color: "#d59563" }],
-        },
-        {
-          featureType: "water",
-          elementType: "geometry",
-          stylers: [{ color: "#17263c" }],
-        },
-        {
-          featureType: "water",
-          elementType: "labels.text.fill",
-          stylers: [{ color: "#515c6d" }],
-        },
-        {
-          featureType: "water",
-          elementType: "labels.text.stroke",
-          stylers: [{ color: "#17263c" }],
-        },
-      ],
-    });
+    map.setView([44.4268, 26.1025], 13);
   }, []);
 
   if (loading) {
@@ -512,12 +405,38 @@ export default function Dispatcher() {
           </CardHeader>
           <CardContent className="flex flex-col gap-4">
             <p className="text-gray-400 text-center">Autentifică-te pentru a accesa panoul de dispatcher</p>
-            <Button
-              className="w-full bg-yellow-500 hover:bg-yellow-600 text-black font-bold"
-              onClick={() => (window.location.href = getLoginUrl())}
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                loginMut.mutate({ email: loginEmail, password: loginPassword });
+              }}
+              className="flex flex-col gap-3"
             >
-              Autentificare Dispatcher
-            </Button>
+              <Input
+                type="email"
+                placeholder="Email"
+                value={loginEmail}
+                onChange={(e) => setLoginEmail(e.target.value)}
+                className="bg-gray-800 border-gray-600 text-white"
+                required
+              />
+              <Input
+                type="password"
+                placeholder="Parolă"
+                value={loginPassword}
+                onChange={(e) => setLoginPassword(e.target.value)}
+                className="bg-gray-800 border-gray-600 text-white"
+                required
+              />
+              {loginError && <p className="text-red-400 text-sm text-center">{loginError}</p>}
+              <Button
+                type="submit"
+                className="w-full bg-yellow-500 hover:bg-yellow-600 text-black font-bold"
+                disabled={loginMut.isPending}
+              >
+                {loginMut.isPending ? "Se autentifică..." : "Autentificare Dispatcher"}
+              </Button>
+            </form>
           </CardContent>
         </Card>
       </div>
@@ -952,11 +871,11 @@ export default function Dispatcher() {
         </div>
 
         {/* Map */}
-        <div className="flex-1 relative flex flex-col">
+        <div className="flex-1 relative flex flex-col" style={{ isolation: "isolate" }}>
           <MapView onMapReady={handleMapReady} className="flex-1 w-full" />
 
           {/* Map Legend */}
-          <div className="absolute top-4 right-4 bg-gray-900 bg-opacity-90 rounded-lg p-3 text-xs text-white border border-gray-700">
+          <div className="absolute top-4 right-4 bg-gray-900 bg-opacity-90 rounded-lg p-3 text-xs text-white border border-gray-700 z-[1000]">
             <div className="font-semibold mb-2 text-yellow-400">Legendă</div>
             <div className="flex items-center gap-2 mb-2">
               <div className="w-3 h-3 bg-green-500 rounded-full"></div>

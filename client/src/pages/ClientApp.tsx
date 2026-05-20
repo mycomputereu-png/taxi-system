@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, useCallback } from "react";
+import L from "leaflet";
 import { trpc } from "@/lib/trpc";
-import { MapView } from "@/components/Map";
+import { MapView, createSvgIcon, fetchOSRMRoute } from "@/components/Map";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -107,10 +108,10 @@ export default function ClientApp() {
 
   // Map state
   const [mapReady, setMapReady] = useState(false);
-  const mapRef = useRef<google.maps.Map | null>(null);
-  const clientMarkerRef = useRef<google.maps.Marker | null>(null);
-  const driverMarkerRef = useRef<google.maps.Marker | null>(null);
-  const directionsRendererRef = useRef<google.maps.DirectionsRenderer | null>(null);
+  const mapRef = useRef<L.Map | null>(null);
+  const clientMarkerRef = useRef<L.Marker | null>(null);
+  const driverMarkerRef = useRef<L.Marker | null>(null);
+  const routePolylineRef = useRef<L.Polyline | null>(null);
   const locationWatchRef = useRef<number | null>(null);
   const [clientPos, setClientPos] = useState<{ lat: number; lng: number } | null>(null);
 
@@ -162,22 +163,14 @@ export default function ClientApp() {
   const updateClientMarker = useCallback((lat: number, lng: number) => {
     if (!mapRef.current) return;
     if (!clientMarkerRef.current) {
-      clientMarkerRef.current = new google.maps.Marker({
-        map: mapRef.current,
-        icon: {
-          path: google.maps.SymbolPath.CIRCLE,
-          scale: 10,
-          fillColor: "#3b82f6",
-          fillOpacity: 1,
-          strokeColor: "#fff",
-          strokeWeight: 3,
-        },
+      clientMarkerRef.current = L.marker([lat, lng], {
+        icon: createSvgIcon("#3b82f6", "circle"),
         title: "Locația mea",
-        zIndex: 100,
-      });
+        zIndexOffset: 100,
+      }).addTo(mapRef.current);
     }
-    clientMarkerRef.current.setPosition({ lat, lng });
-    mapRef.current.panTo({ lat, lng });
+    clientMarkerRef.current.setLatLng([lat, lng]);
+    mapRef.current.panTo([lat, lng]);
   }, []);
 
   // Calculate distance between two coordinates (in meters)
@@ -221,21 +214,13 @@ export default function ClientApp() {
   const updateDriverMarker = useCallback((lat: number, lng: number) => {
     if (!mapRef.current) return;
     if (!driverMarkerRef.current) {
-      driverMarkerRef.current = new google.maps.Marker({
-        map: mapRef.current,
-        icon: {
-          path: google.maps.SymbolPath.FORWARD_CLOSED_ARROW,
-          scale: 7,
-          fillColor: "#f59e0b",
-          fillOpacity: 1,
-          strokeColor: "#fff",
-          strokeWeight: 2,
-        },
+      driverMarkerRef.current = L.marker([lat, lng], {
+        icon: createSvgIcon("#f59e0b", "arrow"),
         title: "Șoferul tău",
-        zIndex: 200,
-      });
+        zIndexOffset: 200,
+      }).addTo(mapRef.current);
     }
-    driverMarkerRef.current.setPosition({ lat, lng });
+    driverMarkerRef.current.setLatLng([lat, lng]);
   }, []);
 
   // Reset arrival notification when ride ends
@@ -250,12 +235,12 @@ export default function ClientApp() {
   // Calculate distance between two coordinates (in meters)
 
   const clearDirections = useCallback(() => {
-    if (directionsRendererRef.current) {
-      directionsRendererRef.current.setMap(null);
-      directionsRendererRef.current = null;
+    if (routePolylineRef.current) {
+      routePolylineRef.current.remove();
+      routePolylineRef.current = null;
     }
     if (driverMarkerRef.current) {
-      driverMarkerRef.current.setMap(null);
+      driverMarkerRef.current.remove();
       driverMarkerRef.current = null;
     }
     setEstimatedArrival(null);
@@ -366,57 +351,24 @@ export default function ClientApp() {
       setDriverPos({ lat: data.lat, lng: data.lng });
       updateDriverMarker(data.lat, data.lng);
       if (clientPos) {
-        // Initialize DirectionsRenderer if not already done
-        if (mapRef.current && !directionsRendererRef.current) {
-          console.log("Initializing DirectionsRenderer");
-          directionsRendererRef.current = new google.maps.DirectionsRenderer({
-            map: mapRef.current,
-            suppressMarkers: true,
-            polylineOptions: {
-              strokeColor: "#3b82f6",
-              strokeWeight: 5,
-              strokeOpacity: 0.8,
-            },
-          });
-        }
-        
-        // Draw route using DirectionsService
-        if (mapRef.current && directionsRendererRef.current) {
-          console.log("Drawing route from", data, "to", clientPos);
-          const directionsService = new google.maps.DirectionsService();
-          directionsService.route(
-            {
-              origin: { lat: data.lat, lng: data.lng },
-              destination: clientPos,
-              travelMode: google.maps.TravelMode.DRIVING,
-            },
-            (result, status) => {
-              console.log("Route result:", status, result);
-              if (status === "OK" && result && directionsRendererRef.current) {
-                directionsRendererRef.current.setDirections(result);
+        // Draw route using OSRM
+        if (mapRef.current) {
+          fetchOSRMRoute({ lat: data.lat, lng: data.lng }, clientPos).then((route) => {
+            if (route && mapRef.current) {
+              if (routePolylineRef.current) {
+                routePolylineRef.current.remove();
               }
-            }
-          );
-        }
-        
-        // Calculate ETA
-        const distanceService = new google.maps.DistanceMatrixService();
-        distanceService.getDistanceMatrix(
-          {
-            origins: [{ lat: data.lat, lng: data.lng }],
-            destinations: [clientPos],
-            travelMode: google.maps.TravelMode.DRIVING,
-          },
-          (result, status) => {
-            console.log("ETA result:", status, result);
-            if (status === "OK" && result?.rows[0]?.elements[0]?.duration) {
-              const minutes = Math.ceil(result.rows[0].elements[0].duration.value / 60);
-              console.log("Setting ETA:", minutes);
+              routePolylineRef.current = L.polyline(route.coordinates, {
+                color: "#3b82f6",
+                weight: 5,
+                opacity: 0.8,
+              }).addTo(mapRef.current!);
+              const minutes = Math.ceil(route.duration / 60);
               setEstimatedArrival(minutes);
               setCountdownETA(minutes);
             }
-          }
-        );
+          });
+        }
         
         // Check if driver is within 50 meters of client
         const distance = calculateDistance(data.lat, data.lng, clientPos.lat, clientPos.lng);
@@ -471,7 +423,7 @@ export default function ClientApp() {
     };
   }, [session, emit]);
 
-  const handleMapReady = useCallback((map: google.maps.Map) => {
+  const handleMapReady = useCallback((map: L.Map) => {
     if (!map) {
       console.error("Map not initialized");
       return;
@@ -479,27 +431,21 @@ export default function ClientApp() {
     mapRef.current = map;
     setMapReady(true);
     
-    // Center on client position if available
     if (clientPos) {
-      map.setCenter({ lat: clientPos.lat, lng: clientPos.lng });
-      map.setZoom(15);
+      map.setView([clientPos.lat, clientPos.lng], 15);
       updateClientMarker(clientPos.lat, clientPos.lng);
     } else {
-      // Try to center on user location - don't set fallback center yet
       navigator.geolocation?.getCurrentPosition(
         (pos) => {
           const lat = pos.coords.latitude;
           const lng = pos.coords.longitude;
-          map.setCenter({ lat, lng });
-          map.setZoom(15);
+          map.setView([lat, lng], 15);
           setClientPos({ lat, lng });
           updateClientMarker(lat, lng);
         },
         (error) => {
           console.warn("Geolocation error:", error);
-          // Only set fallback after GPS fails
-          map.setCenter({ lat: 44.4268, lng: 26.1025 });
-          map.setZoom(13);
+          map.setView([44.4268, 26.1025], 13);
         }
       );
     }
@@ -679,7 +625,7 @@ export default function ClientApp() {
       </header>
 
       {/* Map */}
-      <div className="flex-1 relative w-full overflow-hidden">
+      <div className="flex-1 relative w-full overflow-hidden" style={{ isolation: "isolate" }}>
         {!mapReady && (
           <div className="absolute inset-0 bg-gray-900 flex items-center justify-center z-10">
             <span className="text-gray-400">Se încarcă hartă...</span>
@@ -689,19 +635,19 @@ export default function ClientApp() {
 
         {/* Status overlay */}
         {rideStatus === "pending" && (
-          <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-gray-900 bg-opacity-95 rounded-xl px-4 py-2 flex items-center gap-2 shadow-lg">
+          <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-gray-900 bg-opacity-95 rounded-xl px-4 py-2 flex items-center gap-2 shadow-lg z-[1000]">
             <div className="w-2 h-2 bg-yellow-400 rounded-full animate-pulse"></div>
             <span className="text-white text-sm font-medium">Se caută șofer...</span>
           </div>
         )}
         {(rideStatus === "assigned") && (
-          <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-blue-900 bg-opacity-95 rounded-xl px-4 py-2 flex items-center gap-2 shadow-lg">
+          <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-blue-900 bg-opacity-95 rounded-xl px-4 py-2 flex items-center gap-2 shadow-lg z-[1000]">
             <Car className="w-4 h-4 text-blue-300" />
             <span className="text-white text-sm font-medium">Șofer asignat, în așteptare acceptare...</span>
           </div>
         )}
         {rideStatus === "accepted" && countdownETA !== null && (
-          <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-green-900 bg-opacity-95 rounded-xl px-4 py-3 flex items-center gap-2 shadow-lg">
+          <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-green-900 bg-opacity-95 rounded-xl px-4 py-3 flex items-center gap-2 shadow-lg z-[1000]">
             <Clock className="w-4 h-4 text-green-300" />
             <span className="text-white text-sm font-medium">
               Soferul vine in {countdownETA > 0 ? `~${countdownETA} min` : "Sosind..."}
@@ -709,7 +655,7 @@ export default function ClientApp() {
           </div>
         )}
         {rideStatus === "completed" && (
-          <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-green-800 bg-opacity-95 rounded-xl px-4 py-2 flex items-center gap-2 shadow-lg">
+          <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-green-800 bg-opacity-95 rounded-xl px-4 py-2 flex items-center gap-2 shadow-lg z-[1000]">
             <CheckCircle className="w-4 h-4 text-green-300" />
             <span className="text-white text-sm font-medium">Cursă finalizată! Mulțumim!</span>
           </div>
