@@ -875,7 +875,7 @@ export default function Dispatcher() {
           <MapView onMapReady={handleMapReady} className="flex-1 w-full" />
 
           {/* Map Legend */}
-          <div className="absolute top-4 right-4 bg-gray-900 bg-opacity-90 rounded-lg p-3 text-xs text-white border border-gray-700">
+          <div className="absolute top-4 right-4 bg-gray-900 bg-opacity-90 rounded-lg p-3 text-xs text-white border border-gray-700 z-[1000]">
             <div className="font-semibold mb-2 text-yellow-400">Legendă</div>
             <div className="flex items-center gap-2 mb-2">
               <div className="w-3 h-3 bg-green-500 rounded-full"></div>

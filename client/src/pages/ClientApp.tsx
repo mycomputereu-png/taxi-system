@@ -625,7 +625,7 @@ export default function ClientApp() {
       </header>
 
       {/* Map */}
-      <div className="flex-1 relative w-full overflow-hidden">
+      <div className="flex-1 relative w-full overflow-hidden" style={{ isolation: "isolate" }}>
         {!mapReady && (
           <div className="absolute inset-0 bg-gray-900 flex items-center justify-center z-10">
             <span className="text-gray-400">Se încarcă hartă...</span>
@@ -635,19 +635,19 @@ export default function ClientApp() {
 
         {/* Status overlay */}
         {rideStatus === "pending" && (
-          <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-gray-900 bg-opacity-95 rounded-xl px-4 py-2 flex items-center gap-2 shadow-lg">
+          <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-gray-900 bg-opacity-95 rounded-xl px-4 py-2 flex items-center gap-2 shadow-lg z-[1000]">
             <div className="w-2 h-2 bg-yellow-400 rounded-full animate-pulse"></div>
             <span className="text-white text-sm font-medium">Se caută șofer...</span>
           </div>
         )}
         {(rideStatus === "assigned") && (
-          <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-blue-900 bg-opacity-95 rounded-xl px-4 py-2 flex items-center gap-2 shadow-lg">
+          <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-blue-900 bg-opacity-95 rounded-xl px-4 py-2 flex items-center gap-2 shadow-lg z-[1000]">
             <Car className="w-4 h-4 text-blue-300" />
             <span className="text-white text-sm font-medium">Șofer asignat, în așteptare acceptare...</span>
           </div>
         )}
         {rideStatus === "accepted" && countdownETA !== null && (
-          <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-green-900 bg-opacity-95 rounded-xl px-4 py-3 flex items-center gap-2 shadow-lg">
+          <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-green-900 bg-opacity-95 rounded-xl px-4 py-3 flex items-center gap-2 shadow-lg z-[1000]">
             <Clock className="w-4 h-4 text-green-300" />
             <span className="text-white text-sm font-medium">
               Soferul vine in {countdownETA > 0 ? `~${countdownETA} min` : "Sosind..."}
@@ -655,7 +655,7 @@ export default function ClientApp() {
           </div>
         )}
         {rideStatus === "completed" && (
-          <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-green-800 bg-opacity-95 rounded-xl px-4 py-2 flex items-center gap-2 shadow-lg">
+          <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-green-800 bg-opacity-95 rounded-xl px-4 py-2 flex items-center gap-2 shadow-lg z-[1000]">
             <CheckCircle className="w-4 h-4 text-green-300" />
             <span className="text-white text-sm font-medium">Cursă finalizată! Mulțumim!</span>
           </div>
