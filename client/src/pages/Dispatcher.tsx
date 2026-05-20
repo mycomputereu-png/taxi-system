@@ -871,7 +871,7 @@ export default function Dispatcher() {
         </div>
 
         {/* Map */}
-        <div className="flex-1 relative flex flex-col">
+        <div className="flex-1 relative flex flex-col" style={{ isolation: "isolate" }}>
           <MapView onMapReady={handleMapReady} className="flex-1 w-full" />
 
           {/* Map Legend */}
