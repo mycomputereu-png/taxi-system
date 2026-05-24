@@ -99,6 +99,7 @@ export default function DriverApp() {
   const locationWatchRef = useRef<number | null>(null);
   const socketRef = useRef<any>(null);
   const [driverPos, setDriverPos] = useState<{ lat: number; lng: number } | null>(null);
+  const driverPosRef = useRef<{ lat: number; lng: number } | null>(null);
   const [estimatedArrival, setEstimatedArrival] = useState<number | null>(null);
   const [rideStartLocation, setRideStartLocation] = useState<{ lat: number; lng: number } | null>(null);
 
@@ -145,12 +146,13 @@ export default function DriverApp() {
   const rejectRideMut = trpc.driver.rejectRide.useMutation({
     onSuccess: () => {
       toast.info("Cursă refuzată.");
-      // Unsubscribe from client location if was tracking
       if (pendingRide && socketRef.current) {
         socketRef.current.emit("untrack:client", { clientId: pendingRide.clientId });
       }
       setPendingRide(null);
       setRideAccepted(false);
+      clearDirections();
+      setEstimatedArrival(null);
     },
     onError: (e) => toast.error(e.message),
   });
@@ -272,17 +274,32 @@ export default function DriverApp() {
       s.emit("auth:driver", { token: session.token });
     });
 
-    s.on("ride:assigned", (data: AssignedRide) => {
-      setPendingRide(data);
+    s.on("ride:assigned", (data: any) => {
+      const ride: AssignedRide = {
+        rideId: data.rideId,
+        clientId: data.clientId,
+        clientPhone: data.clientPhone,
+        clientName: data.clientName,
+        lat: parseFloat(String(data.clientLat || data.lat)),
+        lng: parseFloat(String(data.clientLng || data.lng)),
+        address: data.clientAddress || data.address,
+      };
+      setPendingRide(ride);
       setRideAccepted(false);
-      setAcceptanceCountdown(30); // Start 30-second countdown
-      toast.info(`🚖 Cursă nouă asignată de la ${data.clientPhone || "client"}!`, { duration: 10000 });
+      setAcceptanceCountdown(30);
+      toast.info(`🚖 Cursă nouă asignată de la ${ride.clientPhone || "client"}!`, { duration: 10000 });
+      // Show client location and route on map immediately (before accept)
+      if (ride.lat && ride.lng) {
+        showPendingRideOnMap(ride);
+      }
     });
 
     s.on("ride:timeout", (data: { rideId: number }) => {
       if (pendingRide?.rideId === data.rideId) {
         setPendingRide(null);
         setAcceptanceCountdown(null);
+        clearDirections();
+        setEstimatedArrival(null);
         toast.error("⏱️ Timp expirat! Cursa a fost reasignată altui șofer.");
       }
     });
@@ -292,6 +309,7 @@ export default function DriverApp() {
       setActiveRide(null);
       setRideAccepted(false);
       clearDirections();
+      setEstimatedArrival(null);
       toast.info("Cursa a fost anulată de client/dispatcher");
     });
 
@@ -322,6 +340,7 @@ export default function DriverApp() {
       (pos) => {
         const { latitude: lat, longitude: lng } = pos.coords;
         setDriverPos({ lat, lng });
+        driverPosRef.current = { lat, lng };
         socketRef.current?.emit("location:driver", { lat, lng, token: session.token });
         updateDriverMarker(lat, lng);
         // Update route if navigating to client
@@ -423,6 +442,27 @@ export default function DriverApp() {
     }
     setEstimatedArrival(null);
   }, []);
+
+  const showPendingRideOnMap = useCallback((ride: AssignedRide) => {
+    if (!mapRef.current) return;
+    // Place client marker on map
+    if (!clientMarkerRef.current) {
+      clientMarkerRef.current = L.marker([ride.lat, ride.lng], {
+        icon: createSvgIcon("#ef4444", "circle"),
+        title: "Locația clientului",
+        zIndexOffset: 100,
+      }).addTo(mapRef.current);
+    }
+    clientMarkerRef.current.setLatLng([ride.lat, ride.lng]);
+    // Draw route from driver to client if we have driver position
+    const pos = driverPosRef.current;
+    if (pos) {
+      drawRouteToClient(pos, { lat: ride.lat, lng: ride.lng });
+    } else {
+      // At least pan to client
+      mapRef.current.setView([ride.lat, ride.lng], 14);
+    }
+  }, [drawRouteToClient]);
 
   const handleMapReady = useCallback((map: L.Map) => {
     mapRef.current = map;
@@ -553,7 +593,7 @@ export default function DriverApp() {
           </div>
         </div>
 
-        {rideAccepted && estimatedArrival && (
+        {(rideAccepted || pendingRide) && estimatedArrival && (
           <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-blue-900 bg-opacity-95 rounded-xl px-4 py-2 flex items-center gap-2 shadow-lg z-[1000]">
             <Clock className="w-4 h-4 text-blue-300" />
             <span className="text-white text-sm font-medium">~{estimatedArrival} min până la client</span>
@@ -608,6 +648,12 @@ export default function DriverApp() {
                     <div className="flex items-center gap-1 mt-1">
                       <MapPin className="w-3 h-3 text-gray-400" />
                       <span className="text-gray-400 text-xs">{pendingRide.address}</span>
+                    </div>
+                  )}
+                  {estimatedArrival && (
+                    <div className="flex items-center gap-1 mt-1">
+                      <Navigation className="w-3 h-3 text-blue-400" />
+                      <span className="text-blue-400 text-sm font-medium">~{estimatedArrival} min distanță</span>
                     </div>
                   )}
                 </div>

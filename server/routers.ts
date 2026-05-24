@@ -560,8 +560,12 @@ export const appRouter = router({
         });
 
         const countdown = 30;
+        const client = await getClientById_safe(ride.clientId);
         emitToDriver(input.driverId, "ride:assigned", {
           rideId: ride.id,
+          clientId: ride.clientId,
+          clientPhone: client?.phone,
+          clientName: client?.name,
           clientLat: ride.clientLat,
           clientLng: ride.clientLng,
           clientAddress: ride.clientAddress,
@@ -626,8 +630,12 @@ export const appRouter = router({
         });
 
         const countdown = 30;
+        const client = await getClientById_safe(ride.clientId);
         emitToDriver(driverId, "ride:assigned", {
           rideId: ride.id,
+          clientId: ride.clientId,
+          clientPhone: client?.phone,
+          clientName: client?.name,
           clientLat: ride.clientLat,
           clientLng: ride.clientLng,
           clientAddress: ride.clientAddress,
