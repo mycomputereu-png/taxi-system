@@ -13,7 +13,7 @@ import { toast } from "sonner";
 import { useSocket, getSocket } from "@/hooks/useSocket";
 import { DriverDetailsModal } from "@/components/DriverDetailsModal";
 import {
-  MapPin, Users, Car, Clock, Plus, Trash2, LogOut, CheckCircle, XCircle, Navigation, Star, Phone, ArrowLeft
+  MapPin, Users, Car, Clock, Plus, Trash2, LogOut, CheckCircle, XCircle, Navigation, Star, Phone, ArrowLeft, Zap, Hand
 } from "lucide-react";
 import { ThemeToggle } from "@/components/ThemeToggle";
 
@@ -107,6 +107,11 @@ export default function Dispatcher() {
   const [panicResponseNote, setPanicResponseNote] = useState("");
   const [selectedDriver, setSelectedDriver] = useState<any | null>(null);
   const [driverDetailsOpen, setDriverDetailsOpen] = useState(false);
+  const [autoAssign, setAutoAssign] = useState<boolean>(() => {
+    try { return localStorage.getItem("dispatcher_auto_assign") === "true"; } catch { return false; }
+  });
+  const autoAssignRef = useRef(autoAssign);
+  useEffect(() => { autoAssignRef.current = autoAssign; }, [autoAssign]);
 
   // tRPC queries
   const utils = trpc.useUtils();
@@ -163,6 +168,19 @@ export default function Dispatcher() {
       setSelectedRide(null);
     },
     onError: (e) => toast.error(e.message),
+  });
+
+  const autoAssignMut = trpc.dispatcher.autoAssignRide.useMutation({
+    onSuccess: (data) => {
+      if (data.success) {
+        const distInfo = data.distanceKm != null ? ` (${data.distanceKm} km)` : "";
+        toast.success(`Asignare automată: ${data.driverName}${distInfo}`);
+      } else {
+        toast.warning(data.message ?? "Nu s-a putut asigna automat");
+      }
+      utils.dispatcher.getActiveRides.invalidate();
+    },
+    onError: (e) => toast.error(`Auto-asignare eșuată: ${e.message}`),
   });
 
   const cancelRideMut = trpc.dispatcher.cancelRide.useMutation({
@@ -245,6 +263,10 @@ export default function Dispatcher() {
         return next;
       });
       utils.dispatcher.getActiveRides.invalidate();
+      if (autoAssignRef.current && data.rideId) {
+        console.log("[Dispatcher] Auto-assign enabled, assigning ride", data.rideId);
+        autoAssignMut.mutate({ rideId: data.rideId });
+      }
     });
 
     const unsubRideStatus = on("ride:status", () => {
@@ -460,6 +482,23 @@ export default function Dispatcher() {
         </div>
         <div className="flex items-center gap-2 md:gap-4">
           <span className="text-gray-500 dark:text-gray-400 text-xs md:text-sm hidden md:inline">{user?.name}</span>
+          <button
+            onClick={() => {
+              const next = !autoAssign;
+              setAutoAssign(next);
+              try { localStorage.setItem("dispatcher_auto_assign", String(next)); } catch {}
+              toast.info(next ? "Asignare automată activată" : "Asignare manuală activată");
+            }}
+            className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-all border ${
+              autoAssign
+                ? "bg-green-600 border-green-500 text-white shadow-lg shadow-green-900/30"
+                : "bg-gray-200 dark:bg-gray-800 border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300"
+            }`}
+            title={autoAssign ? "Mod automat: cursa se asignează automat către cel mai apropiat șofer" : "Mod manual: selectezi manual șoferul"}
+          >
+            {autoAssign ? <Zap className="w-3.5 h-3.5" /> : <Hand className="w-3.5 h-3.5" />}
+            <span className="hidden md:inline">{autoAssign ? "Auto" : "Manual"}</span>
+          </button>
           <ThemeToggle />
           <Button variant="outline" size="sm" onClick={() => logout()} className="border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800">
             <LogOut className="w-4 h-4 mr-1" /> <span className="hidden md:inline">Ieșire</span>

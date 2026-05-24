@@ -60,6 +60,17 @@ function generateOtpCode() {
   return Math.floor(100000 + Math.random() * 900000).toString();
 }
 
+// ─── Haversine distance (km) between two GPS coordinates ─────────────────────
+function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number): number {
+  const R = 6371;
+  const dLat = ((lat2 - lat1) * Math.PI) / 180;
+  const dLng = ((lng2 - lng1) * Math.PI) / 180;
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos((lat1 * Math.PI) / 180) * Math.cos((lat2 * Math.PI) / 180) * Math.sin(dLng / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
 // ─── Router ───────────────────────────────────────────────────────────────────
 
 export const appRouter = router({
@@ -565,6 +576,78 @@ export const appRouter = router({
         });
         emitToDispatchers("ride:assigned", { rideId: ride.id, driverId: input.driverId });
         return { success: true };
+      }),
+
+    autoAssignRide: protectedProcedure
+      .input(z.object({ rideId: z.number() }))
+      .mutation(async ({ input }) => {
+        const ride = await getRideById(input.rideId);
+        if (!ride) throw new TRPCError({ code: "NOT_FOUND", message: "Cursa nu a fost găsită" });
+        if (ride.status !== "pending") throw new TRPCError({ code: "BAD_REQUEST", message: "Cursa nu mai este în așteptare" });
+        if (!ride.clientLat || !ride.clientLng) throw new TRPCError({ code: "BAD_REQUEST", message: "Locația clientului lipsește" });
+
+        const available = await getAvailableDrivers();
+        if (available.length === 0) {
+          return { success: false, reason: "no_drivers", message: "Niciun șofer disponibil" };
+        }
+
+        const clientLat = parseFloat(String(ride.clientLat));
+        const clientLng = parseFloat(String(ride.clientLng));
+
+        // Find nearest driver with known GPS location
+        let nearest: { id: number; name: string; distance: number } | null = null;
+        for (const d of available) {
+          if (!d.currentLat || !d.currentLng) continue;
+          const dist = haversineKm(clientLat, clientLng, parseFloat(String(d.currentLat)), parseFloat(String(d.currentLng)));
+          if (!nearest || dist < nearest.distance) {
+            nearest = { id: d.id, name: d.name, distance: dist };
+          }
+        }
+
+        if (!nearest) {
+          // Drivers exist but none have GPS — fall back to first available
+          const fallback = available[0];
+          nearest = { id: fallback.id, name: fallback.name, distance: -1 };
+        }
+
+        const driverId = nearest.id;
+        await assignRide(input.rideId, driverId);
+
+        // Set 30-second acceptance timeout (same as manual assign)
+        setRideAcceptanceTimeout(input.rideId, async () => {
+          const updatedRide = await getRideById(input.rideId);
+          if (updatedRide && updatedRide.status === "assigned") {
+            await updateRideStatus(input.rideId, "pending");
+            await updateDriverStatus(driverId, "available");
+            emitToDriver(driverId, "ride:timeout", { rideId: input.rideId });
+            emitToClient(updatedRide.clientId, "ride:reassigning", { rideId: input.rideId });
+            emitToDispatchers("ride:reassigning", { rideId: input.rideId });
+          }
+        });
+
+        const countdown = 30;
+        emitToDriver(driverId, "ride:assigned", {
+          rideId: ride.id,
+          clientLat: ride.clientLat,
+          clientLng: ride.clientLng,
+          clientAddress: ride.clientAddress,
+          destinationLat: ride.destinationLat,
+          destinationLng: ride.destinationLng,
+          destinationAddress: ride.destinationAddress,
+          countdown,
+        });
+        const driver = await getDriverById(driverId);
+        emitToClient(ride.clientId, "ride:assigned", {
+          driverId,
+          driverName: driver?.name ?? "Șofer",
+        });
+        emitToDispatchers("ride:assigned", { rideId: ride.id, driverId });
+        return {
+          success: true,
+          driverId,
+          driverName: nearest.name,
+          distanceKm: nearest.distance >= 0 ? Math.round(nearest.distance * 10) / 10 : null,
+        };
       }),
 
     getPendingRides: protectedProcedure.query(async () => {
