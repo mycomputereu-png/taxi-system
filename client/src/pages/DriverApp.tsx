@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import { io } from "socket.io-client";
 import { User, Lock, MapPin, Car, CheckCircle, XCircle, Navigation, Phone, Clock, Star } from "lucide-react";
+import { ThemeToggle } from "@/components/ThemeToggle";
 
 type DriverSession = { token: string; driverId: number; name: string; username: string };
 
@@ -457,12 +458,12 @@ export default function DriverApp() {
 
   if (!session) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-gray-950 via-yellow-950 to-gray-900 flex items-center justify-center p-4">
-        <Card className="w-full max-w-sm bg-gray-900 border-gray-700 shadow-2xl">
+      <div className="min-h-screen bg-gradient-to-br from-gray-100 via-yellow-50 to-gray-100 dark:from-gray-950 dark:via-yellow-950 dark:to-gray-900 flex items-center justify-center p-4">
+        <Card className="w-full max-w-sm bg-white dark:bg-gray-900 border-gray-300 dark:border-gray-700 shadow-2xl">
           <CardHeader className="text-center pb-2">
             <div className="text-5xl mb-2">🚗</div>
-            <CardTitle className="text-white text-2xl font-bold">Portal Șofer</CardTitle>
-            <p className="text-gray-400 text-sm">Autentificare cu datele create de dispatcher</p>
+            <CardTitle className="text-gray-900 dark:text-white text-2xl font-bold">Portal Șofer</CardTitle>
+            <p className="text-gray-500 dark:text-gray-400 text-sm">Autentificare cu datele create de dispatcher</p>
           </CardHeader>
           <CardContent className="flex flex-col gap-4">
             <div className="relative">
@@ -471,7 +472,7 @@ export default function DriverApp() {
                 placeholder="Username"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
-                className="bg-gray-800 border-gray-600 text-white pl-10"
+                className="bg-gray-50 dark:bg-gray-800 border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white pl-10"
                 autoComplete="username"
               />
             </div>
@@ -482,7 +483,7 @@ export default function DriverApp() {
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="bg-gray-800 border-gray-600 text-white pl-10"
+                className="bg-gray-50 dark:bg-gray-800 border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white pl-10"
                 autoComplete="current-password"
                 onKeyDown={(e) => e.key === "Enter" && loginMut.mutate({ username, password })}
               />
@@ -503,14 +504,15 @@ export default function DriverApp() {
   // ─── Main Driver App ──────────────────────────────────────────────────────
 
   return (
-    <div className="h-screen bg-gray-950 flex flex-col">
+    <div className="h-screen bg-gray-100 dark:bg-gray-950 flex flex-col">
       {/* Header */}
-      <header className="bg-gray-900 border-b border-gray-800 px-4 py-3 flex items-center justify-between">
+      <header className="bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800 px-4 py-3 flex items-center justify-between">
         <div className="flex items-center gap-2">
           <span className="text-xl">🚗</span>
-          <span className="text-yellow-400 font-bold">{session.name}</span>
+          <span className="text-yellow-600 dark:text-yellow-400 font-bold">{session.name}</span>
         </div>
         <div className="flex items-center gap-3">
+          <ThemeToggle />
           {/* Availability Toggle Button */}
           <Button
             onClick={() => {
@@ -528,18 +530,18 @@ export default function DriverApp() {
           >
             {rideAccepted || activeRide ? "Ocupat" : pendingRide ? "Cursă nouă!" : driverAvailable ? "Disponibil" : "Indisponibil"}
           </Button>
-          <Button variant="ghost" size="sm" onClick={handleLogout} className="text-gray-400 hover:text-white text-xs">
+          <Button variant="ghost" size="sm" onClick={handleLogout} className="text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white text-xs">
             Ieșire
           </Button>
         </div>
       </header>
 
       {/* Map */}
-      <div className="flex-1 relative bg-gray-800 overflow-hidden" style={{ isolation: "isolate" }}>
+      <div className="flex-1 relative bg-gray-200 dark:bg-gray-800 overflow-hidden" style={{ isolation: "isolate" }}>
         <MapView onMapReady={handleMapReady} className="w-full h-full" />
 
         {/* Map Legend */}
-        <div className="absolute top-4 right-4 bg-gray-900 bg-opacity-90 rounded-lg p-3 text-xs text-white border border-gray-700 z-[1000]">
+        <div className="absolute top-4 right-4 bg-white/90 dark:bg-gray-900/90 rounded-lg p-3 text-xs text-gray-900 dark:text-white border border-gray-300 dark:border-gray-700 z-[1000]">
           <div className="font-semibold mb-2 text-yellow-400">Legendă</div>
           <div className="flex items-center gap-2 mb-2">
             <div className="w-3 h-3 bg-amber-500 rounded-full"></div>
@@ -573,7 +575,7 @@ export default function DriverApp() {
       </div>
 
       {/* Bottom Panel */}
-      <div className="bg-gray-900 border-t border-gray-800 p-4">
+      <div className="bg-white dark:bg-gray-900 border-t border-gray-200 dark:border-gray-800 p-4">
         {/* Pending ride notification */}
         {pendingRide && !rideAccepted && (
           <div className="flex flex-col gap-3">
@@ -685,23 +687,23 @@ export default function DriverApp() {
         {/* Idle state */}
         {!pendingRide && !rideAccepted && !activeRide && (
           <div className="text-center py-4">
-            <Car className="w-12 h-12 mx-auto text-gray-600 mb-2" />
-            <p className="text-gray-400">{driverAvailable ? "Disponibil - așteptați curse noi" : "Indisponibil - nu primesc curse"}</p>
-            <p className="text-gray-600 text-xs mt-1">GPS activ, locația se transmite în timp real</p>
+            <Car className="w-12 h-12 mx-auto text-gray-400 dark:text-gray-600 mb-2" />
+            <p className="text-gray-500 dark:text-gray-400">{driverAvailable ? "Disponibil - așteptați curse noi" : "Indisponibil - nu primesc curse"}</p>
+            <p className="text-gray-400 dark:text-gray-600 text-xs mt-1">GPS activ, locația se transmite în timp real</p>
           </div>
         )}
       </div>
 
       {/* Rating Modal */}
       {showRatingModal && activeRide && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <Card className="w-96 bg-gray-900 border-gray-700">
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <Card className="w-96 bg-white dark:bg-gray-900 border-gray-300 dark:border-gray-700">
             <CardHeader>
               <CardTitle className="text-white">Evaluează clientul</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
               <div>
-                <label className="text-gray-300 text-sm">Rating (1-5 stele)</label>
+                <label className="text-gray-600 dark:text-gray-300 text-sm">Rating (1-5 stele)</label>
                 <div className="flex gap-2 mt-2">
                   {[1, 2, 3, 4, 5].map((star) => (
                     <button
@@ -717,12 +719,12 @@ export default function DriverApp() {
                 </div>
               </div>
               <div>
-                <label className="text-gray-300 text-sm">Comentariu (opțional)</label>
+                <label className="text-gray-600 dark:text-gray-300 text-sm">Comentariu (opțional)</label>
                 <Input
                   placeholder="Scrie un comentariu..."
                   value={ratingComment}
                   onChange={(e) => setRatingComment(e.target.value)}
-                  className="bg-gray-800 border-gray-700 text-white mt-2"
+                  className="bg-gray-50 dark:bg-gray-800 border-gray-300 dark:border-gray-700 text-gray-900 dark:text-white mt-2"
                 />
               </div>
               <div className="flex gap-2">
@@ -758,8 +760,8 @@ export default function DriverApp() {
 
       {/* Panic Confirmation Modal */}
       {showPanicConfirm && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <Card className="w-96 bg-gray-900 border-red-700">
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <Card className="w-96 bg-white dark:bg-gray-900 border-red-700">
             <CardHeader>
               <CardTitle className="text-red-400 flex items-center gap-2">
                 <span className="text-2xl">🚨</span>

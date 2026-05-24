@@ -19,6 +19,10 @@ import L from "leaflet";
 import { useEffect, useRef } from "react";
 import { usePersistFn } from "@/hooks/usePersistFn";
 import { cn } from "@/lib/utils";
+import { useTheme } from "@/contexts/ThemeContext";
+
+const DARK_TILES = "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png";
+const LIGHT_TILES = "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png";
 
 // Inject Leaflet CSS once
 let leafletCssLoaded = false;
@@ -101,6 +105,8 @@ export function MapView({
 }: MapViewProps) {
   const mapContainer = useRef<HTMLDivElement>(null);
   const mapInstance = useRef<L.Map | null>(null);
+  const tileLayerRef = useRef<L.TileLayer | null>(null);
+  const { theme } = useTheme();
 
   const init = usePersistFn(async () => {
     try {
@@ -122,8 +128,8 @@ export function MapView({
         zoomControl: true,
       });
 
-      // Dark tile layer (CartoDB Dark Matter) matching dark theme
-      L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
+      const tileUrl = theme === "dark" ? DARK_TILES : LIGHT_TILES;
+      tileLayerRef.current = L.tileLayer(tileUrl, {
         attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/">CARTO</a>',
         subdomains: "abcd",
         maxZoom: 20,
@@ -146,9 +152,17 @@ export function MapView({
       if (mapInstance.current) {
         mapInstance.current.remove();
         mapInstance.current = null;
+        tileLayerRef.current = null;
       }
     };
   }, [init]);
+
+  // Switch tile layer when theme changes
+  useEffect(() => {
+    if (!mapInstance.current || !tileLayerRef.current) return;
+    const newUrl = theme === "dark" ? DARK_TILES : LIGHT_TILES;
+    tileLayerRef.current.setUrl(newUrl);
+  }, [theme]);
 
   return (
     <div ref={mapContainer} className={cn("w-full h-full", className)} />

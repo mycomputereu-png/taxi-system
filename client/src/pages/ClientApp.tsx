@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import { useSocket } from "@/hooks/useSocket";
 import { Phone, MapPin, Car, Clock, CheckCircle, XCircle, Navigation, User } from "lucide-react";
+import { ThemeToggle } from "@/components/ThemeToggle";
 import ClientProfile from "./ClientProfile";
 
 type ClientSession = { token: string; clientId: number; phone: string };
@@ -495,12 +496,12 @@ export default function ClientApp() {
 
   if (!session) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-gray-950 via-blue-950 to-gray-900 flex items-center justify-center p-4">
-        <Card className="w-full max-w-sm bg-gray-900 border-gray-700 shadow-2xl">
+      <div className="min-h-screen bg-gradient-to-br from-gray-100 via-blue-50 to-gray-100 dark:from-gray-950 dark:via-blue-950 dark:to-gray-900 flex items-center justify-center p-4">
+        <Card className="w-full max-w-sm bg-white dark:bg-gray-900 border-gray-300 dark:border-gray-700 shadow-2xl">
           <CardHeader className="text-center pb-2">
             <div className="text-5xl mb-2">🚖</div>
-            <CardTitle className="text-white text-2xl font-bold">Taxi App</CardTitle>
-            <p className="text-gray-400 text-sm">Autentificare cu număr de telefon</p>
+            <CardTitle className="text-gray-900 dark:text-white text-2xl font-bold">Taxi App</CardTitle>
+            <p className="text-gray-500 dark:text-gray-400 text-sm">Autentificare cu număr de telefon</p>
           </CardHeader>
           <CardContent className="flex flex-col gap-4">
             {!otpSent && !tempToken ? (
@@ -511,7 +512,7 @@ export default function ClientApp() {
                     placeholder="+40 7XX XXX XXX"
                     value={phone}
                     onChange={(e) => setPhone(e.target.value)}
-                    className="bg-gray-800 border-gray-600 text-white pl-10"
+                    className="bg-gray-50 dark:bg-gray-800 border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white pl-10"
                     type="tel"
                   />
                 </div>
@@ -532,7 +533,7 @@ export default function ClientApp() {
             ) : tempToken ? (
               // Name input screen
               <>
-                <p className="text-gray-400 text-sm text-center mb-4">
+                <p className="text-gray-500 dark:text-gray-400 text-sm text-center mb-4">
                   Bun venit! Introdu-ți numele
                 </p>
                 <div className="relative">
@@ -541,7 +542,7 @@ export default function ClientApp() {
                     placeholder="Introdu-ți numele"
                     value={name}
                     onChange={(e) => setName(e.target.value)}
-                    className="bg-gray-800 border-gray-600 text-white pl-10"
+                    className="bg-gray-50 dark:bg-gray-800 border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white pl-10"
                   />
                 </div>
                 <Button
@@ -560,8 +561,8 @@ export default function ClientApp() {
               </>
             ) : (
               <>
-                <p className="text-gray-400 text-sm text-center">
-                  Introdu codul trimis la <span className="text-white font-semibold">{phone}</span>
+                <p className="text-gray-500 dark:text-gray-400 text-sm text-center">
+                  Introdu codul trimis la <span className="text-gray-900 dark:text-white font-semibold">{phone}</span>
                 </p>
                 {devOtp && (
                   <div className="bg-blue-900 border-2 border-blue-500 rounded-lg p-4 text-center">
@@ -573,7 +574,7 @@ export default function ClientApp() {
                   placeholder="Cod OTP (6 cifre)"
                   value={otp}
                   onChange={(e) => setOtp(e.target.value)}
-                  className="bg-gray-800 border-gray-600 text-white text-center text-xl tracking-widest"
+                  className="bg-gray-50 dark:bg-gray-800 border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white text-center text-xl tracking-widest"
                   maxLength={6}
                 />
                 <Button
@@ -609,16 +610,17 @@ export default function ClientApp() {
   const isRideActive = ["pending", "assigned", "accepted", "in_progress"].includes(rideStatus);
 
   return (
-    <div className="h-screen bg-gray-950 flex flex-col">
+    <div className="h-screen bg-gray-100 dark:bg-gray-950 flex flex-col">
       {/* Header */}
-      <header className="bg-gray-900 border-b border-gray-800 px-4 py-3 flex items-center justify-between flex-shrink-0">
+      <header className="bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800 px-4 py-3 flex items-center justify-between flex-shrink-0">
         <div className="flex items-center gap-2">
           <span className="text-xl">🚖</span>
-          <span className="text-yellow-400 font-bold">Taxi App</span>
+          <span className="text-yellow-600 dark:text-yellow-400 font-bold">Taxi App</span>
         </div>
         <div className="flex items-center gap-3">
-          <span className="text-gray-400 text-sm">{session.phone}</span>
-          <Button variant="ghost" size="sm" onClick={handleLogout} className="text-gray-400 hover:text-white text-xs">
+          <span className="text-gray-500 dark:text-gray-400 text-sm">{session.phone}</span>
+          <ThemeToggle />
+          <Button variant="ghost" size="sm" onClick={handleLogout} className="text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white text-xs">
             Ieșire
           </Button>
         </div>
@@ -627,8 +629,8 @@ export default function ClientApp() {
       {/* Map */}
       <div className="flex-1 relative w-full overflow-hidden" style={{ isolation: "isolate" }}>
         {!mapReady && (
-          <div className="absolute inset-0 bg-gray-900 flex items-center justify-center z-10">
-            <span className="text-gray-400">Se încarcă hartă...</span>
+          <div className="absolute inset-0 bg-gray-100 dark:bg-gray-900 flex items-center justify-center z-10">
+            <span className="text-gray-500 dark:text-gray-400">Se încarcă hartă...</span>
           </div>
         )}
         <MapView onMapReady={handleMapReady} className="w-full h-full" />
@@ -663,7 +665,7 @@ export default function ClientApp() {
       </div>
 
       {/* Bottom Panel */}
-      <div className="bg-gray-900 border-t border-gray-800 p-4">
+      <div className="bg-white dark:bg-gray-900 border-t border-gray-200 dark:border-gray-800 p-4">
         {rideStatus === "idle" || rideStatus === "rejected" || rideStatus === "cancelled" ? (
           <div className="flex flex-col gap-3">
             {(rideStatus === "rejected" || rideStatus === "cancelled") && (
@@ -702,8 +704,8 @@ export default function ClientApp() {
           <div className="flex flex-col gap-3">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-white font-semibold">Cerere trimisă</p>
-                <p className="text-gray-400 text-sm">Dispatcherul caută un șofer disponibil...</p>
+                <p className="text-gray-900 dark:text-white font-semibold">Cerere trimisă</p>
+                <p className="text-gray-500 dark:text-gray-400 text-sm">Dispatcherul caută un șofer disponibil...</p>
               </div>
               <div className="w-8 h-8 border-2 border-yellow-400 border-t-transparent rounded-full animate-spin"></div>
             </div>
@@ -722,8 +724,8 @@ export default function ClientApp() {
                 {driverInfo?.name?.[0] || "S"}
               </div>
               <div>
-                <p className="text-white font-semibold">{driverInfo?.name || "Șofer asignat"}</p>
-                <p className="text-gray-400 text-sm">Așteptăm confirmarea șoferului...</p>
+                <p className="text-gray-900 dark:text-white font-semibold">{driverInfo?.name || "Șofer asignat"}</p>
+                <p className="text-gray-500 dark:text-gray-400 text-sm">Așteptăm confirmarea șoferului...</p>
               </div>
             </div>
             <Button
@@ -740,8 +742,8 @@ export default function ClientApp() {
               {driverInfo?.name?.[0] || "S"}
             </div>
             <div className="flex-1">
-              <p className="text-white font-semibold">{driverInfo?.name || "Soferul tau"}</p>
-              {driverInfo?.phone && <p className="text-gray-400 text-sm">{driverInfo.phone}</p>}
+              <p className="text-gray-900 dark:text-white font-semibold">{driverInfo?.name || "Soferul tau"}</p>
+              {driverInfo?.phone && <p className="text-gray-500 dark:text-gray-400 text-sm">{driverInfo.phone}</p>}
               {countdownETA !== null && (
                 <div className="flex items-center gap-1 mt-1">
                   <Clock className="w-3 h-3 text-green-400" />

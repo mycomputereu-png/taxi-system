@@ -15,6 +15,7 @@ import { DriverDetailsModal } from "@/components/DriverDetailsModal";
 import {
   MapPin, Users, Car, Clock, Plus, Trash2, LogOut, CheckCircle, XCircle, Navigation, Star, Phone, ArrowLeft
 } from "lucide-react";
+import { ThemeToggle } from "@/components/ThemeToggle";
 
 
 type DriverMarker = {
@@ -390,21 +391,21 @@ export default function Dispatcher() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-950 flex items-center justify-center">
-        <div className="text-white text-xl">Se încarcă...</div>
+      <div className="min-h-screen bg-gray-100 dark:bg-gray-950 flex items-center justify-center">
+        <div className="text-gray-900 dark:text-white text-xl">Se încarcă...</div>
       </div>
     );
   }
 
   if (!isAuthenticated) {
     return (
-      <div className="min-h-screen bg-gray-950 flex items-center justify-center">
-        <Card className="w-96 bg-gray-900 border-gray-700">
+      <div className="min-h-screen bg-gray-100 dark:bg-gray-950 flex items-center justify-center">
+        <Card className="w-96 bg-white dark:bg-gray-900 border-gray-300 dark:border-gray-700">
           <CardHeader>
-            <CardTitle className="text-white text-center text-2xl">🚖 Dispatcher</CardTitle>
+            <CardTitle className="text-gray-900 dark:text-white text-center text-2xl">🚖 Dispatcher</CardTitle>
           </CardHeader>
           <CardContent className="flex flex-col gap-4">
-            <p className="text-gray-400 text-center">Autentifică-te pentru a accesa panoul de dispatcher</p>
+            <p className="text-gray-500 dark:text-gray-400 text-center">Autentifică-te pentru a accesa panoul de dispatcher</p>
             <form
               onSubmit={(e) => {
                 e.preventDefault();
@@ -417,7 +418,7 @@ export default function Dispatcher() {
                 placeholder="Email"
                 value={loginEmail}
                 onChange={(e) => setLoginEmail(e.target.value)}
-                className="bg-gray-800 border-gray-600 text-white"
+                className="bg-gray-50 dark:bg-gray-800 border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white"
                 required
               />
               <Input
@@ -425,7 +426,7 @@ export default function Dispatcher() {
                 placeholder="Parolă"
                 value={loginPassword}
                 onChange={(e) => setLoginPassword(e.target.value)}
-                className="bg-gray-800 border-gray-600 text-white"
+                className="bg-gray-50 dark:bg-gray-800 border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white"
                 required
               />
               {loginError && <p className="text-red-400 text-sm text-center">{loginError}</p>}
@@ -449,43 +450,44 @@ export default function Dispatcher() {
   const assignedRides = activeRidesQuery.data?.filter((r) => r.status !== "pending") ?? [];
 
   return (
-    <div className="min-h-screen bg-gray-950 text-white flex flex-col">
+    <div className="min-h-screen bg-gray-100 dark:bg-gray-950 text-gray-900 dark:text-white flex flex-col">
       {/* Header */}
-      <header className="bg-gray-900 border-b border-gray-800 px-6 py-3 flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <span className="text-2xl">🚖</span>
-          <h1 className="text-xl font-bold text-yellow-400">Taxi Dispatcher</h1>
-          <Badge className="bg-green-600 text-white">Online</Badge>
+      <header className="bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800 px-3 md:px-6 py-3 flex items-center justify-between">
+        <div className="flex items-center gap-2 md:gap-3">
+          <span className="text-xl md:text-2xl">🚖</span>
+          <h1 className="text-base md:text-xl font-bold text-yellow-600 dark:text-yellow-400">Taxi Dispatcher</h1>
+          <Badge className="bg-green-600 text-white hidden md:inline-flex">Online</Badge>
         </div>
-        <div className="flex items-center gap-4">
-          <span className="text-gray-400 text-sm">{user?.name}</span>
-          <Button variant="outline" size="sm" onClick={() => logout()} className="border-gray-600 text-gray-300 hover:bg-gray-800">
-            <LogOut className="w-4 h-4 mr-1" /> Ieșire
+        <div className="flex items-center gap-2 md:gap-4">
+          <span className="text-gray-500 dark:text-gray-400 text-xs md:text-sm hidden md:inline">{user?.name}</span>
+          <ThemeToggle />
+          <Button variant="outline" size="sm" onClick={() => logout()} className="border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800">
+            <LogOut className="w-4 h-4 mr-1" /> <span className="hidden md:inline">Ieșire</span>
           </Button>
         </div>
       </header>
 
       <div className="flex flex-1 overflow-hidden">
         {/* Sidebar */}
-        <div className="w-96 bg-gray-900 border-r border-gray-800 flex flex-col overflow-hidden">
+        <div className="w-80 md:w-96 bg-white dark:bg-gray-900 border-r border-gray-200 dark:border-gray-800 flex flex-col overflow-hidden">
           {/* Stats Bar */}
-          <div className="px-3 py-3 border-b border-gray-800 grid grid-cols-3 gap-2">
-            <Card className="bg-gray-800 border-gray-700 p-2">
-              <div className="text-xs text-gray-400">Curse</div>
-              <div className="text-lg font-bold text-red-400">{pendingRides.length}</div>
+          <div className="px-3 py-3 border-b border-gray-200 dark:border-gray-800 grid grid-cols-3 gap-2">
+            <Card className="bg-gray-50 dark:bg-gray-800 border-gray-200 dark:border-gray-700 p-2">
+              <div className="text-xs text-gray-500 dark:text-gray-400">Curse</div>
+              <div className="text-lg font-bold text-red-500 dark:text-red-400">{pendingRides.length}</div>
             </Card>
-            <Card className="bg-gray-800 border-gray-700 p-2">
-              <div className="text-xs text-gray-400">Active</div>
-              <div className="text-lg font-bold text-blue-400">{assignedRides.length}</div>
+            <Card className="bg-gray-50 dark:bg-gray-800 border-gray-200 dark:border-gray-700 p-2">
+              <div className="text-xs text-gray-500 dark:text-gray-400">Active</div>
+              <div className="text-lg font-bold text-blue-500 dark:text-blue-400">{assignedRides.length}</div>
             </Card>
-            <Card className="bg-gray-800 border-gray-700 p-2">
-              <div className="text-xs text-gray-400">Șoferi</div>
-              <div className="text-lg font-bold text-green-400">{driversQuery.data?.length || 0}</div>
+            <Card className="bg-gray-50 dark:bg-gray-800 border-gray-200 dark:border-gray-700 p-2">
+              <div className="text-xs text-gray-500 dark:text-gray-400">Șoferi</div>
+              <div className="text-lg font-bold text-green-500 dark:text-green-400">{driversQuery.data?.length || 0}</div>
             </Card>
           </div>
 
           <Tabs defaultValue="pending" className="flex flex-col flex-1 overflow-hidden">
-            <TabsList className="grid grid-cols-5 m-3 bg-gray-800">
+            <TabsList className="grid grid-cols-5 m-3 bg-gray-200 dark:bg-gray-800">
               <TabsTrigger value="pending" className="text-xs font-semibold dispatcher-tab-pending">
                 <Car className="w-3 h-3 mr-1" /> Curse
                 {pendingRides.length > 0 && (

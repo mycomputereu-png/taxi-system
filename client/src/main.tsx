@@ -23,6 +23,17 @@ const trpcClient = trpc.createClient({
   ],
 });
 
+// Dynamic manifest switching for PWA (Client/Driver get their own manifest)
+const path = window.location.pathname;
+const manifestLink = document.getElementById('pwa-manifest') as HTMLLinkElement | null;
+if (manifestLink) {
+  if (path.startsWith('/client')) {
+    manifestLink.href = '/manifest-client.json';
+  } else if (path.startsWith('/driver')) {
+    manifestLink.href = '/manifest-driver.json';
+  }
+}
+
 // Register service worker for PWA
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
