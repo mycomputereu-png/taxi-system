@@ -262,3 +262,31 @@
   border-bottom: 3px solid rgb(248, 113, 113) !important;
   box-shadow: 0 0 12px rgba(220, 38, 38, 0.7) !important;
 }
+
+/* Alert flash animations */
+@keyframes alert-flash {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+@keyframes border-glow {
+  0%, 100% { box-shadow: 0 0 8px rgba(59, 130, 246, 0.5); }
+  50% { box-shadow: 0 0 24px rgba(59, 130, 246, 0.9), 0 0 48px rgba(59, 130, 246, 0.4); }
+}
+
+.alert-flash {
+  animation: alert-flash 0.5s ease-in-out 4;
+}
+
+.border-glow-blue {
+  animation: border-glow 1s ease-in-out 3;
+}
+
+@keyframes border-glow-yellow {
+  0%, 100% { box-shadow: 0 0 8px rgba(234, 179, 8, 0.5); }
+  50% { box-shadow: 0 0 24px rgba(234, 179, 8, 0.9), 0 0 48px rgba(234, 179, 8, 0.4); }
+}
+
+.border-glow-yellow {
+  animation: border-glow-yellow 1s ease-in-out 3;
+}

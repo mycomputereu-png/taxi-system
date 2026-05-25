@@ -16,6 +16,7 @@ import {
   MapPin, Users, Car, Clock, Plus, Trash2, LogOut, CheckCircle, XCircle, Navigation, Star, Phone, ArrowLeft, Zap, Hand
 } from "lucide-react";
 import { ThemeToggle } from "@/components/ThemeToggle";
+import { playNewRideSound } from "@/lib/alerts";
 
 
 type DriverMarker = {
@@ -106,6 +107,7 @@ export default function Dispatcher() {
   const [selectedPanicAlertId, setSelectedPanicAlertId] = useState<number | null>(null);
   const [panicResponseNote, setPanicResponseNote] = useState("");
   const [selectedDriver, setSelectedDriver] = useState<any | null>(null);
+  const [newRideFlash, setNewRideFlash] = useState(false);
   const [driverDetailsOpen, setDriverDetailsOpen] = useState(false);
   const [autoAssign, setAutoAssign] = useState<boolean>(() => {
     try { return localStorage.getItem("dispatcher_auto_assign") === "true"; } catch { return false; }
@@ -248,6 +250,9 @@ export default function Dispatcher() {
 
     const unsubRideNew = on("ride:new", (data: any) => {
       console.log("[Dispatcher] Ride new event received:", data);
+      playNewRideSound();
+      setNewRideFlash(true);
+      setTimeout(() => setNewRideFlash(false), 3000);
       toast.info(`🚖 Cerere nouă taxi de la ${data.clientPhone}`, { duration: 8000 });
       setClientLocations((prev) => {
         const next = new Map(prev);
@@ -527,7 +532,7 @@ export default function Dispatcher() {
 
           <Tabs defaultValue="pending" className="flex flex-col flex-1 overflow-hidden">
             <TabsList className="grid grid-cols-5 m-3 bg-gray-200 dark:bg-gray-800">
-              <TabsTrigger value="pending" className="text-xs font-semibold dispatcher-tab-pending">
+              <TabsTrigger value="pending" className={`text-xs font-semibold dispatcher-tab-pending ${newRideFlash ? "border-glow-yellow alert-flash" : ""}`}>
                 <Car className="w-3 h-3 mr-1" /> Curse
                 {pendingRides.length > 0 && (
                   <span className="ml-1 bg-red-600 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center font-bold animate-pulse">

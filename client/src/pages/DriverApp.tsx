@@ -10,6 +10,7 @@ import { toast } from "sonner";
 import { io } from "socket.io-client";
 import { User, Lock, MapPin, Car, CheckCircle, XCircle, Navigation, Phone, Clock, Star } from "lucide-react";
 import { ThemeToggle } from "@/components/ThemeToggle";
+import { playRideAssignedSound } from "@/lib/alerts";
 
 type DriverSession = { token: string; driverId: number; name: string; username: string };
 
@@ -89,6 +90,7 @@ export default function DriverApp() {
   const [showPanicConfirm, setShowPanicConfirm] = useState(false);
   const [panicAlertId, setPanicAlertId] = useState<number | null>(null);
   const [driverAvailable, setDriverAvailable] = useState(true); // true = Disponibil, false = Indisponibil
+  const [rideAlertFlash, setRideAlertFlash] = useState(false);
 
   // Map
   const [mapReady, setMapReady] = useState(false);
@@ -287,6 +289,9 @@ export default function DriverApp() {
       setPendingRide(ride);
       setRideAccepted(false);
       setAcceptanceCountdown(30);
+      playRideAssignedSound();
+      setRideAlertFlash(true);
+      setTimeout(() => setRideAlertFlash(false), 3000);
       toast.info(`🚖 Cursă nouă asignată de la ${ride.clientPhone || "client"}!`, { duration: 10000 });
       // Show client location and route on map immediately (before accept)
       if (ride.lat && ride.lng) {
@@ -619,7 +624,7 @@ export default function DriverApp() {
         {/* Pending ride notification */}
         {pendingRide && !rideAccepted && (
           <div className="flex flex-col gap-3">
-            <div className="bg-blue-900 border border-blue-600 rounded-xl p-4">
+            <div className={`bg-blue-900 border border-blue-600 rounded-xl p-4 ${rideAlertFlash ? "border-glow-blue alert-flash" : ""}`}>
               <div className="flex items-center justify-between mb-3">
                 <div className="flex items-center gap-2">
                   <div className="w-2 h-2 bg-blue-400 rounded-full animate-pulse"></div>
