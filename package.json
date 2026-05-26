@@ -62,6 +62,8 @@
     "input-otp": "^1.4.2",
     "jose": "6.1.0",
     "leaflet": "^1.9.4",
+    "livekit-client": "^2.19.0",
+    "livekit-server-sdk": "^2.15.3",
     "lucide-react": "^0.453.0",
     "mysql2": "^3.15.0",
     "nanoid": "^5.1.5",

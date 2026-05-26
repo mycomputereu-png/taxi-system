@@ -4,7 +4,7 @@ import { createServer } from "http";
 import net from "net";
 import { createExpressMiddleware } from "@trpc/server/adapters/express";
 import { registerOAuthRoutes } from "./oauth";
-import { appRouter } from "../routers";
+import { appRouter, generateLivekitToken } from "../routers";
 import { createContext } from "./context";
 import { serveStatic, setupVite } from "./vite";
 import { initSocketIO } from "../socket";
@@ -38,6 +38,21 @@ async function startServer() {
   registerOAuthRoutes(app);
   // Socket.IO for real-time communication
   initSocketIO(server);
+  // LiveKit token endpoint
+  app.post("/api/livekit/token", async (req, res) => {
+    try {
+      const { identity, room } = req.body;
+      if (!identity || !room) {
+        res.status(400).json({ error: "identity and room are required" });
+        return;
+      }
+      const token = await generateLivekitToken(identity, room);
+      res.json({ token });
+    } catch (err) {
+      console.error("[LiveKit] Token generation error:", err);
+      res.status(500).json({ error: "Failed to generate token" });
+    }
+  });
   // tRPC API
   app.use(
     "/api/trpc",

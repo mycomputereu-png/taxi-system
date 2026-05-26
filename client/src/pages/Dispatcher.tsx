@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { playNewRideSound } from "@/lib/alerts";
+import { Room, RoomEvent, Track, RemoteTrackPublication, RemoteParticipant } from "livekit-client";
 
 
 type DriverMarker = {
@@ -115,14 +116,11 @@ export default function Dispatcher() {
   const autoAssignRef = useRef(autoAssign);
   useEffect(() => { autoAssignRef.current = autoAssign; }, [autoAssign]);
 
-  // PTT (Push-to-Talk) state
+  // PTT (Push-to-Talk) state - LiveKit
   const [pttActive, setPttActive] = useState(false);
   const [pttIncoming, setPttIncoming] = useState<{ driverName: string; driverId: number } | null>(null);
-  const pttMediaRecorderRef = useRef<MediaRecorder | null>(null);
-  const pttStreamRef = useRef<MediaStream | null>(null);
-  const pttAudioChunksRef = useRef<Blob[]>([]);
-  const pttIncomingChunksRef = useRef<{ audio: string; mimeType: string }[]>([]);
-  const pttMimeTypeRef = useRef<string>("audio/webm;codecs=opus");
+  const livekitRoomRef = useRef<Room | null>(null);
+  const livekitConnectedRef = useRef(false);
 
   // tRPC queries
   const utils = trpc.useUtils();
@@ -296,50 +294,12 @@ export default function Dispatcher() {
       });
     });
 
-    // PTT listeners
-    const unsubPttStart = on("ptt:start", (data: { from: string; driverName?: string; driverId?: number }) => {
-      if (data.from === "driver" && data.driverName && data.driverId) {
-        setPttIncoming({ driverName: data.driverName, driverId: data.driverId });
-      }
-    });
-    const unsubPttAudio = on("ptt:audio", (data: { from: string; audio: string; mimeType?: string }) => {
-      if (data.from === "driver" && data.audio) {
-        pttIncomingChunksRef.current.push({ audio: data.audio, mimeType: data.mimeType || "audio/webm;codecs=opus" });
-      }
-    });
-    const unsubPttStop = on("ptt:stop", (data: { from: string }) => {
-      if (data.from === "driver") {
-        setPttIncoming(null);
-        const chunks = pttIncomingChunksRef.current;
-        pttIncomingChunksRef.current = [];
-        if (chunks.length > 0) {
-          try {
-            const mt = chunks[0].mimeType;
-            const blobParts = chunks.map((c) => {
-              const byteString = atob(c.audio);
-              const ab = new Uint8Array(byteString.length);
-              for (let i = 0; i < byteString.length; i++) ab[i] = byteString.charCodeAt(i);
-              return ab;
-            });
-            const blob = new Blob(blobParts, { type: mt });
-            const url = URL.createObjectURL(blob);
-            const audio = new Audio(url);
-            audio.play().catch((e) => console.error("[PTT] Play error:", e));
-            audio.onended = () => URL.revokeObjectURL(url);
-          } catch (e) { console.error("[PTT] Audio playback error:", e); }
-        }
-      }
-    });
-
     return () => {
       unsubDriverLoc();
       unsubDriverStatus();
       unsubRideNew();
       unsubRideStatus();
       unsubClientLoc();
-      unsubPttStart();
-      unsubPttAudio();
-      unsubPttStop();
     };
   }, [isAuthenticated, emit, on, utils]);
 
@@ -457,70 +417,89 @@ export default function Dispatcher() {
     return () => window.removeEventListener("assignRide", handler);
   }, []);
 
-  // PTT start/stop handlers
-  const pttPendingReadsRef = useRef(0);
+  // LiveKit PTT: connect to room on mount, stay connected to receive audio
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    const room = new Room();
+    livekitRoomRef.current = room;
 
-  const pttStart = useCallback(async () => {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      pttStreamRef.current = stream;
-      pttAudioChunksRef.current = [];
-      pttPendingReadsRef.current = 0;
-      // Detect supported MIME type (Safari doesn't support WebM)
-      const mimeTypes = ["audio/webm;codecs=opus", "audio/webm", "audio/mp4", "audio/ogg;codecs=opus", ""];
-      let selectedMime = "";
-      for (const mt of mimeTypes) {
-        if (mt === "" || MediaRecorder.isTypeSupported(mt)) { selectedMime = mt; break; }
+    // Handle incoming audio from drivers
+    const handleTrackSubscribed = (
+      track: RemoteTrackPublication["track"],
+      publication: RemoteTrackPublication,
+      participant: RemoteParticipant
+    ) => {
+      if (track && track.kind === Track.Kind.Audio) {
+        const el = track.attach();
+        el.id = `lk-audio-${participant.identity}`;
+        document.body.appendChild(el);
+        const name = participant.identity.replace("driver-", "");
+        const idMatch = participant.metadata?.match(/driverId:(\d+)/);
+        setPttIncoming({ driverName: name, driverId: idMatch ? parseInt(idMatch[1]) : 0 });
       }
-      pttMimeTypeRef.current = selectedMime || "audio/webm";
-      const recorderOptions: MediaRecorderOptions = selectedMime ? { mimeType: selectedMime } : {};
-      const recorder = new MediaRecorder(stream, recorderOptions);
-      pttMediaRecorderRef.current = recorder;
-      recorder.ondataavailable = (e) => {
-        if (e.data.size > 0) {
-          pttPendingReadsRef.current++;
-          const reader = new FileReader();
-          reader.onloadend = () => {
-            const base64 = (reader.result as string).split(",")[1];
-            emit("ptt:audio", { from: "dispatcher", audio: base64, mimeType: pttMimeTypeRef.current });
-            pttPendingReadsRef.current--;
-          };
-          reader.readAsDataURL(e.data);
-        }
-      };
-      recorder.start(250);
-      emit("ptt:start", { from: "dispatcher" });
+    };
+
+    const handleTrackUnsubscribed = (
+      track: RemoteTrackPublication["track"],
+      _publication: RemoteTrackPublication,
+      participant: RemoteParticipant
+    ) => {
+      if (track && track.kind === Track.Kind.Audio) {
+        track.detach().forEach((el) => el.remove());
+        setPttIncoming(null);
+      }
+    };
+
+    room.on(RoomEvent.TrackSubscribed, handleTrackSubscribed);
+    room.on(RoomEvent.TrackUnsubscribed, handleTrackUnsubscribed);
+
+    // Connect to LiveKit room
+    (async () => {
+      try {
+        const resp = await fetch("/api/livekit/token", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ identity: "dispatcher", room: "ptt-room" }),
+        });
+        const { token } = await resp.json();
+        const wsUrl = `wss://${window.location.host}/livekit`;
+        await room.connect(wsUrl, token);
+        livekitConnectedRef.current = true;
+        console.log("[LiveKit] Dispatcher connected to ptt-room");
+      } catch (err) {
+        console.error("[LiveKit] Connection error:", err);
+      }
+    })();
+
+    return () => {
+      room.disconnect();
+      livekitConnectedRef.current = false;
+      livekitRoomRef.current = null;
+    };
+  }, [isAuthenticated]);
+
+  // PTT start/stop handlers (LiveKit)
+  const pttStart = useCallback(async () => {
+    const room = livekitRoomRef.current;
+    if (!room || !livekitConnectedRef.current) {
+      toast.error("Radio nu este conectat");
+      return;
+    }
+    try {
+      await room.localParticipant.setMicrophoneEnabled(true);
       setPttActive(true);
     } catch (err) {
       toast.error("Nu s-a putut accesa microfonul");
     }
-  }, [emit]);
+  }, []);
 
-  const pttStop = useCallback(() => {
-    const recorder = pttMediaRecorderRef.current;
-    if (recorder && recorder.state !== "inactive") {
-      recorder.onstop = () => {
-        // Wait for all pending FileReader operations to complete
-        const waitAndSend = () => {
-          if (pttPendingReadsRef.current > 0) {
-            setTimeout(waitAndSend, 50);
-            return;
-          }
-          emit("ptt:stop", { from: "dispatcher" });
-        };
-        waitAndSend();
-      };
-      recorder.stop();
-    } else {
-      emit("ptt:stop", { from: "dispatcher" });
+  const pttStop = useCallback(async () => {
+    const room = livekitRoomRef.current;
+    if (room) {
+      await room.localParticipant.setMicrophoneEnabled(false);
     }
-    if (pttStreamRef.current) {
-      pttStreamRef.current.getTracks().forEach((t) => t.stop());
-      pttStreamRef.current = null;
-    }
-    pttMediaRecorderRef.current = null;
     setPttActive(false);
-  }, [emit]);
+  }, []);
 
   const handleMapReady = useCallback((map: L.Map) => {
     mapRef.current = map;
