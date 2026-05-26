@@ -8,7 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import { io } from "socket.io-client";
-import { User, Lock, MapPin, Car, CheckCircle, XCircle, Navigation, Phone, Clock, Star } from "lucide-react";
+import { User, Lock, MapPin, Car, CheckCircle, XCircle, Navigation, Phone, Clock, Star, Mic } from "lucide-react";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { playRideAssignedSound } from "@/lib/alerts";
 
@@ -104,6 +104,12 @@ export default function DriverApp() {
   const driverPosRef = useRef<{ lat: number; lng: number } | null>(null);
   const [estimatedArrival, setEstimatedArrival] = useState<number | null>(null);
   const [rideStartLocation, setRideStartLocation] = useState<{ lat: number; lng: number } | null>(null);
+
+  // PTT (Push-to-Talk) state
+  const [pttActive, setPttActive] = useState(false);
+  const [pttIncoming, setPttIncoming] = useState(false);
+  const pttMediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const pttStreamRef = useRef<MediaStream | null>(null);
 
   // tRPC
   const loginMut = trpc.driver.login.useMutation({
@@ -330,6 +336,29 @@ export default function DriverApp() {
       }
     });
 
+    // PTT listeners
+    s.on("ptt:start", (data: { from: string }) => {
+      if (data.from === "dispatcher") setPttIncoming(true);
+    });
+    s.on("ptt:audio", (data: { from: string; audio: string }) => {
+      if (data.from === "dispatcher" && data.audio) {
+        try {
+          const byteString = atob(data.audio);
+          const ab = new ArrayBuffer(byteString.length);
+          const ia = new Uint8Array(ab);
+          for (let i = 0; i < byteString.length; i++) ia[i] = byteString.charCodeAt(i);
+          const blob = new Blob([ab], { type: "audio/webm;codecs=opus" });
+          const url = URL.createObjectURL(blob);
+          const audio = new Audio(url);
+          audio.play().catch(() => {});
+          audio.onended = () => URL.revokeObjectURL(url);
+        } catch (e) { console.error("[PTT] Audio playback error:", e); }
+      }
+    });
+    s.on("ptt:stop", (data: { from: string }) => {
+      if (data.from === "dispatcher") setPttIncoming(false);
+    });
+
     return () => {
       s.disconnect();
       socketRef.current = null;
@@ -469,6 +498,52 @@ export default function DriverApp() {
     }
   }, [drawRouteToClient]);
 
+  // PTT start/stop handlers
+  const pttStart = useCallback(async () => {
+    if (!session || !socketRef.current) return;
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      pttStreamRef.current = stream;
+      const recorder = new MediaRecorder(stream, { mimeType: "audio/webm;codecs=opus" });
+      pttMediaRecorderRef.current = recorder;
+      recorder.ondataavailable = (e) => {
+        if (e.data.size > 0) {
+          const reader = new FileReader();
+          reader.onloadend = () => {
+            const base64 = (reader.result as string).split(",")[1];
+            socketRef.current?.emit("ptt:audio", {
+              from: "driver",
+              audio: base64,
+              driverName: session.name,
+              driverId: session.driverId,
+            });
+          };
+          reader.readAsDataURL(e.data);
+        }
+      };
+      recorder.start(250);
+      socketRef.current.emit("ptt:start", { from: "driver", driverName: session.name, driverId: session.driverId });
+      setPttActive(true);
+    } catch (err) {
+      toast.error("Nu s-a putut accesa microfonul");
+    }
+  }, [session]);
+
+  const pttStop = useCallback(() => {
+    if (pttMediaRecorderRef.current && pttMediaRecorderRef.current.state !== "inactive") {
+      pttMediaRecorderRef.current.stop();
+    }
+    if (pttStreamRef.current) {
+      pttStreamRef.current.getTracks().forEach((t) => t.stop());
+      pttStreamRef.current = null;
+    }
+    pttMediaRecorderRef.current = null;
+    if (session && socketRef.current) {
+      socketRef.current.emit("ptt:stop", { from: "driver", driverName: session.name, driverId: session.driverId });
+    }
+    setPttActive(false);
+  }, [session]);
+
   const handleMapReady = useCallback((map: L.Map) => {
     mapRef.current = map;
     setMapReady(true);
@@ -557,6 +632,23 @@ export default function DriverApp() {
           <span className="text-yellow-600 dark:text-yellow-400 font-bold">{session.name}</span>
         </div>
         <div className="flex items-center gap-3">
+          {/* PTT Button */}
+          <button
+            onMouseDown={pttStart}
+            onMouseUp={pttStop}
+            onMouseLeave={() => { if (pttActive) pttStop(); }}
+            onTouchStart={(e) => { e.preventDefault(); pttStart(); }}
+            onTouchEnd={(e) => { e.preventDefault(); pttStop(); }}
+            className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-all border ${
+              pttActive
+                ? "bg-red-600 border-red-500 text-white shadow-lg shadow-red-900/30 animate-pulse"
+                : "bg-gray-200 dark:bg-gray-800 border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-700"
+            }`}
+            title="Apasă și ține apăsat pentru a vorbi cu dispecerul"
+          >
+            <Mic className="w-3.5 h-3.5" />
+            <span className="hidden md:inline">{pttActive ? "Transmit..." : "Radio"}</span>
+          </button>
           <ThemeToggle />
           {/* Availability Toggle Button */}
           <Button
@@ -580,6 +672,14 @@ export default function DriverApp() {
           </Button>
         </div>
       </header>
+
+      {/* PTT Incoming Indicator */}
+      {pttIncoming && (
+        <div className="bg-blue-600 text-white px-4 py-2 flex items-center justify-center gap-2 text-sm font-semibold animate-pulse">
+          <Mic className="w-4 h-4" />
+          <span>🔊 Dispecerul transmite...</span>
+        </div>
+      )}
 
       {/* Map */}
       <div className="flex-1 relative bg-gray-200 dark:bg-gray-800 overflow-hidden" style={{ isolation: "isolate" }}>

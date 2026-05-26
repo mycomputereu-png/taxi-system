@@ -135,6 +135,32 @@ export function initSocketIO(httpServer: HttpServer) {
       socket.leave(`tracking:client:${data.clientId}`);
     });
 
+    // ─── Push-to-Talk (Walkie-Talkie) ──────────────────────────────────────────
+
+    socket.on("ptt:start", (data: { from: "dispatcher" | "driver"; driverName?: string; driverId?: number }) => {
+      if (data.from === "dispatcher") {
+        io?.to("drivers").emit("ptt:start", { from: "dispatcher" });
+      } else if (data.from === "driver") {
+        io?.to("dispatchers").emit("ptt:start", { from: "driver", driverName: data.driverName, driverId: data.driverId });
+      }
+    });
+
+    socket.on("ptt:audio", (data: { from: "dispatcher" | "driver"; audio: ArrayBuffer | string; driverName?: string; driverId?: number }) => {
+      if (data.from === "dispatcher") {
+        io?.to("drivers").emit("ptt:audio", { from: "dispatcher", audio: data.audio });
+      } else if (data.from === "driver") {
+        io?.to("dispatchers").emit("ptt:audio", { from: "driver", audio: data.audio, driverName: data.driverName, driverId: data.driverId });
+      }
+    });
+
+    socket.on("ptt:stop", (data: { from: "dispatcher" | "driver"; driverName?: string; driverId?: number }) => {
+      if (data.from === "dispatcher") {
+        io?.to("drivers").emit("ptt:stop", { from: "dispatcher" });
+      } else if (data.from === "driver") {
+        io?.to("dispatchers").emit("ptt:stop", { from: "driver", driverName: data.driverName, driverId: data.driverId });
+      }
+    });
+
     // ─── Disconnect ───────────────────────────────────────────────────────────
 
     socket.on("disconnect", () => {

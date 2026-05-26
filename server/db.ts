@@ -195,10 +195,27 @@ export async function getDriverById(id: number): Promise<Driver | undefined> {
   return result[0];
 }
 
-export async function getAllDrivers(): Promise<Driver[]> {
+export async function getAllDrivers(): Promise<(Driver & { lastCompletedRideAt?: Date | null })[]> {
   const db = await getDb();
   if (!db) return [];
-  return db.select().from(drivers).orderBy(desc(drivers.createdAt));
+  const lastCompleted = db
+    .select({
+      driverId: rides.driverId,
+      lastCompletedAt: sql<Date>`MAX(${rides.completedAt})`.as("lastCompletedAt"),
+    })
+    .from(rides)
+    .where(eq(rides.status, "completed"))
+    .groupBy(rides.driverId)
+    .as("lastCompleted");
+  const result = await db
+    .select({
+      ...getTableColumns(drivers),
+      lastCompletedRideAt: lastCompleted.lastCompletedAt,
+    })
+    .from(drivers)
+    .leftJoin(lastCompleted, eq(drivers.id, lastCompleted.driverId))
+    .orderBy(sql`CASE WHEN ${lastCompleted.lastCompletedAt} IS NULL THEN 1 ELSE 0 END`, sql`${lastCompleted.lastCompletedAt} ASC`);
+  return result;
 }
 
 export async function getAvailableDrivers(): Promise<Driver[]> {

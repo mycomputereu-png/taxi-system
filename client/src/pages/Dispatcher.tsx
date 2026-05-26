@@ -13,7 +13,7 @@ import { toast } from "sonner";
 import { useSocket, getSocket } from "@/hooks/useSocket";
 import { DriverDetailsModal } from "@/components/DriverDetailsModal";
 import {
-  MapPin, Users, Car, Clock, Plus, Trash2, LogOut, CheckCircle, XCircle, Navigation, Star, Phone, ArrowLeft, Zap, Hand
+  MapPin, Users, Car, Clock, Plus, Trash2, LogOut, CheckCircle, XCircle, Navigation, Star, Phone, ArrowLeft, Zap, Hand, Mic
 } from "lucide-react";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { playNewRideSound } from "@/lib/alerts";
@@ -114,6 +114,13 @@ export default function Dispatcher() {
   });
   const autoAssignRef = useRef(autoAssign);
   useEffect(() => { autoAssignRef.current = autoAssign; }, [autoAssign]);
+
+  // PTT (Push-to-Talk) state
+  const [pttActive, setPttActive] = useState(false);
+  const [pttIncoming, setPttIncoming] = useState<{ driverName: string; driverId: number } | null>(null);
+  const pttMediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const pttStreamRef = useRef<MediaStream | null>(null);
+  const pttAudioChunksRef = useRef<Blob[]>([]);
 
   // tRPC queries
   const utils = trpc.useUtils();
@@ -287,12 +294,40 @@ export default function Dispatcher() {
       });
     });
 
+    // PTT listeners
+    const unsubPttStart = on("ptt:start", (data: { from: string; driverName?: string; driverId?: number }) => {
+      if (data.from === "driver" && data.driverName && data.driverId) {
+        setPttIncoming({ driverName: data.driverName, driverId: data.driverId });
+      }
+    });
+    const unsubPttAudio = on("ptt:audio", (data: { from: string; audio: string }) => {
+      if (data.from === "driver" && data.audio) {
+        try {
+          const byteString = atob(data.audio);
+          const ab = new ArrayBuffer(byteString.length);
+          const ia = new Uint8Array(ab);
+          for (let i = 0; i < byteString.length; i++) ia[i] = byteString.charCodeAt(i);
+          const blob = new Blob([ab], { type: "audio/webm;codecs=opus" });
+          const url = URL.createObjectURL(blob);
+          const audio = new Audio(url);
+          audio.play().catch(() => {});
+          audio.onended = () => URL.revokeObjectURL(url);
+        } catch (e) { console.error("[PTT] Audio playback error:", e); }
+      }
+    });
+    const unsubPttStop = on("ptt:stop", (data: { from: string }) => {
+      if (data.from === "driver") setPttIncoming(null);
+    });
+
     return () => {
       unsubDriverLoc();
       unsubDriverStatus();
       unsubRideNew();
       unsubRideStatus();
       unsubClientLoc();
+      unsubPttStart();
+      unsubPttAudio();
+      unsubPttStop();
     };
   }, [isAuthenticated, emit, on, utils]);
 
@@ -410,6 +445,45 @@ export default function Dispatcher() {
     return () => window.removeEventListener("assignRide", handler);
   }, []);
 
+  // PTT start/stop handlers
+  const pttStart = useCallback(async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      pttStreamRef.current = stream;
+      pttAudioChunksRef.current = [];
+      const recorder = new MediaRecorder(stream, { mimeType: "audio/webm;codecs=opus" });
+      pttMediaRecorderRef.current = recorder;
+      recorder.ondataavailable = (e) => {
+        if (e.data.size > 0) {
+          const reader = new FileReader();
+          reader.onloadend = () => {
+            const base64 = (reader.result as string).split(",")[1];
+            emit("ptt:audio", { from: "dispatcher", audio: base64 });
+          };
+          reader.readAsDataURL(e.data);
+        }
+      };
+      recorder.start(250);
+      emit("ptt:start", { from: "dispatcher" });
+      setPttActive(true);
+    } catch (err) {
+      toast.error("Nu s-a putut accesa microfonul");
+    }
+  }, [emit]);
+
+  const pttStop = useCallback(() => {
+    if (pttMediaRecorderRef.current && pttMediaRecorderRef.current.state !== "inactive") {
+      pttMediaRecorderRef.current.stop();
+    }
+    if (pttStreamRef.current) {
+      pttStreamRef.current.getTracks().forEach((t) => t.stop());
+      pttStreamRef.current = null;
+    }
+    pttMediaRecorderRef.current = null;
+    emit("ptt:stop", { from: "dispatcher" });
+    setPttActive(false);
+  }, [emit]);
+
   const handleMapReady = useCallback((map: L.Map) => {
     mapRef.current = map;
     setMapReady(true);
@@ -504,12 +578,37 @@ export default function Dispatcher() {
             {autoAssign ? <Zap className="w-3.5 h-3.5" /> : <Hand className="w-3.5 h-3.5" />}
             <span className="hidden md:inline">{autoAssign ? "Auto" : "Manual"}</span>
           </button>
+          {/* PTT Button */}
+          <button
+            onMouseDown={pttStart}
+            onMouseUp={pttStop}
+            onMouseLeave={() => { if (pttActive) pttStop(); }}
+            onTouchStart={(e) => { e.preventDefault(); pttStart(); }}
+            onTouchEnd={(e) => { e.preventDefault(); pttStop(); }}
+            className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-all border ${
+              pttActive
+                ? "bg-red-600 border-red-500 text-white shadow-lg shadow-red-900/30 animate-pulse"
+                : "bg-gray-200 dark:bg-gray-800 border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-700"
+            }`}
+            title="Apasă și ține apăsat pentru a vorbi cu toți șoferii"
+          >
+            <Mic className="w-3.5 h-3.5" />
+            <span className="hidden md:inline">{pttActive ? "Transmit..." : "Radio"}</span>
+          </button>
           <ThemeToggle />
           <Button variant="outline" size="sm" onClick={() => logout()} className="border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800">
             <LogOut className="w-4 h-4 mr-1" /> <span className="hidden md:inline">Ieșire</span>
           </Button>
         </div>
       </header>
+
+      {/* PTT Incoming Indicator */}
+      {pttIncoming && (
+        <div className="bg-red-600 text-white px-4 py-2 flex items-center justify-center gap-2 text-sm font-semibold animate-pulse">
+          <Mic className="w-4 h-4" />
+          <span>🔊 Șoferul {pttIncoming.driverName} transmite...</span>
+        </div>
+      )}
 
       <div className="flex flex-1 overflow-hidden">
         {/* Sidebar */}
@@ -1095,27 +1194,42 @@ export default function Dispatcher() {
             {availableDrivers.length === 0 ? (
               <p className="text-red-400 text-center py-4">Niciun șofer disponibil momentan</p>
             ) : (
-              availableDrivers.map((driver) => (
-                <Button
-                  key={driver.id}
-                  variant="outline"
-                  className="border-gray-600 hover:bg-gray-800 text-white justify-start"
-                  onClick={() => {
-                    if (selectedRide) assignRideMut.mutate({ rideId: selectedRide, driverId: driver.id });
-                  }}
-                  disabled={assignRideMut.isPending}
-                >
-                  <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 bg-green-700 rounded-full flex items-center justify-center text-sm font-bold">
-                      {driver.name[0]}
+              availableDrivers.map((driver, idx) => {
+                const lastRide = (driver as any).lastCompletedRideAt;
+                const timeAgo = lastRide ? (() => {
+                  const diff = Date.now() - new Date(lastRide).getTime();
+                  const mins = Math.floor(diff / 60000);
+                  if (mins < 60) return `${mins} min`;
+                  const hrs = Math.floor(mins / 60);
+                  if (hrs < 24) return `${hrs}h ${mins % 60}min`;
+                  return `${Math.floor(hrs / 24)}z`;
+                })() : null;
+                return (
+                  <Button
+                    key={driver.id}
+                    variant="outline"
+                    className={`border-gray-600 hover:bg-gray-800 text-white justify-start ${idx === 0 ? "ring-2 ring-yellow-500" : ""}`}
+                    onClick={() => {
+                      if (selectedRide) assignRideMut.mutate({ rideId: selectedRide, driverId: driver.id });
+                    }}
+                    disabled={assignRideMut.isPending}
+                  >
+                    <div className="flex items-center gap-3 w-full">
+                      <div className="w-8 h-8 bg-green-700 rounded-full flex items-center justify-center text-sm font-bold shrink-0">
+                        {driver.name[0]}
+                      </div>
+                      <div className="text-left flex-1">
+                        <p className="font-medium">{driver.name} {idx === 0 && <span className="text-yellow-400 text-xs ml-1">⭐ Cel mai vechi</span>}</p>
+                        <p className="text-gray-400 text-xs">
+                          @{driver.username} {driver.phone && `· ${driver.phone}`}
+                          {timeAgo && <span className="ml-1 text-yellow-400">· Ultima cursă: {timeAgo} în urmă</span>}
+                          {!timeAgo && <span className="ml-1 text-gray-500">· Fără curse</span>}
+                        </p>
+                      </div>
                     </div>
-                    <div className="text-left">
-                      <p className="font-medium">{driver.name}</p>
-                      <p className="text-gray-400 text-xs">@{driver.username} {driver.phone && `· ${driver.phone}`}</p>
-                    </div>
-                  </div>
-                </Button>
-              ))
+                  </Button>
+                );
+              })
             )}
           </div>
         </DialogContent>
