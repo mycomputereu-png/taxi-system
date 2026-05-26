@@ -110,7 +110,8 @@ export default function DriverApp() {
   const [pttIncoming, setPttIncoming] = useState(false);
   const pttMediaRecorderRef = useRef<MediaRecorder | null>(null);
   const pttStreamRef = useRef<MediaStream | null>(null);
-  const pttIncomingChunksRef = useRef<string[]>([]);
+  const pttIncomingChunksRef = useRef<{ audio: string; mimeType: string }[]>([]);
+  const pttMimeTypeRef = useRef<string>("audio/webm;codecs=opus");
 
   // tRPC
   const loginMut = trpc.driver.login.useMutation({
@@ -341,9 +342,9 @@ export default function DriverApp() {
     s.on("ptt:start", (data: { from: string }) => {
       if (data.from === "dispatcher") setPttIncoming(true);
     });
-    s.on("ptt:audio", (data: { from: string; audio: string }) => {
+    s.on("ptt:audio", (data: { from: string; audio: string; mimeType?: string }) => {
       if (data.from === "dispatcher" && data.audio) {
-        pttIncomingChunksRef.current.push(data.audio);
+        pttIncomingChunksRef.current.push({ audio: data.audio, mimeType: data.mimeType || "audio/webm;codecs=opus" });
       }
     });
     s.on("ptt:stop", (data: { from: string }) => {
@@ -353,13 +354,14 @@ export default function DriverApp() {
         pttIncomingChunksRef.current = [];
         if (chunks.length > 0) {
           try {
-            const blobParts = chunks.map((b64) => {
-              const byteString = atob(b64);
+            const mt = chunks[0].mimeType;
+            const blobParts = chunks.map((c) => {
+              const byteString = atob(c.audio);
               const ab = new Uint8Array(byteString.length);
               for (let i = 0; i < byteString.length; i++) ab[i] = byteString.charCodeAt(i);
               return ab;
             });
-            const blob = new Blob(blobParts, { type: "audio/webm;codecs=opus" });
+            const blob = new Blob(blobParts, { type: mt });
             const url = URL.createObjectURL(blob);
             const audio = new Audio(url);
             audio.play().catch((e) => console.error("[PTT] Play error:", e));
@@ -514,7 +516,15 @@ export default function DriverApp() {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       pttStreamRef.current = stream;
-      const recorder = new MediaRecorder(stream, { mimeType: "audio/webm;codecs=opus" });
+      // Detect supported MIME type (Safari doesn't support WebM)
+      const mimeTypes = ["audio/webm;codecs=opus", "audio/webm", "audio/mp4", "audio/ogg;codecs=opus", ""];
+      let selectedMime = "";
+      for (const mt of mimeTypes) {
+        if (mt === "" || MediaRecorder.isTypeSupported(mt)) { selectedMime = mt; break; }
+      }
+      pttMimeTypeRef.current = selectedMime || "audio/webm";
+      const recorderOptions: MediaRecorderOptions = selectedMime ? { mimeType: selectedMime } : {};
+      const recorder = new MediaRecorder(stream, recorderOptions);
       pttMediaRecorderRef.current = recorder;
       recorder.ondataavailable = (e) => {
         if (e.data.size > 0) {
@@ -524,6 +534,7 @@ export default function DriverApp() {
             socketRef.current?.emit("ptt:audio", {
               from: "driver",
               audio: base64,
+              mimeType: pttMimeTypeRef.current,
               driverName: session.name,
               driverId: session.driverId,
             });

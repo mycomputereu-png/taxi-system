@@ -145,11 +145,11 @@ export function initSocketIO(httpServer: HttpServer) {
       }
     });
 
-    socket.on("ptt:audio", (data: { from: "dispatcher" | "driver"; audio: ArrayBuffer | string; driverName?: string; driverId?: number }) => {
+    socket.on("ptt:audio", (data: { from: "dispatcher" | "driver"; audio: ArrayBuffer | string; mimeType?: string; driverName?: string; driverId?: number }) => {
       if (data.from === "dispatcher") {
-        io?.to("drivers").emit("ptt:audio", { from: "dispatcher", audio: data.audio });
+        io?.to("drivers").emit("ptt:audio", { from: "dispatcher", audio: data.audio, mimeType: data.mimeType });
       } else if (data.from === "driver") {
-        io?.to("dispatchers").emit("ptt:audio", { from: "driver", audio: data.audio, driverName: data.driverName, driverId: data.driverId });
+        io?.to("dispatchers").emit("ptt:audio", { from: "driver", audio: data.audio, mimeType: data.mimeType, driverName: data.driverName, driverId: data.driverId });
       }
     });
 

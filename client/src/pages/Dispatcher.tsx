@@ -121,7 +121,8 @@ export default function Dispatcher() {
   const pttMediaRecorderRef = useRef<MediaRecorder | null>(null);
   const pttStreamRef = useRef<MediaStream | null>(null);
   const pttAudioChunksRef = useRef<Blob[]>([]);
-  const pttIncomingChunksRef = useRef<string[]>([]);
+  const pttIncomingChunksRef = useRef<{ audio: string; mimeType: string }[]>([]);
+  const pttMimeTypeRef = useRef<string>("audio/webm;codecs=opus");
 
   // tRPC queries
   const utils = trpc.useUtils();
@@ -301,9 +302,9 @@ export default function Dispatcher() {
         setPttIncoming({ driverName: data.driverName, driverId: data.driverId });
       }
     });
-    const unsubPttAudio = on("ptt:audio", (data: { from: string; audio: string }) => {
+    const unsubPttAudio = on("ptt:audio", (data: { from: string; audio: string; mimeType?: string }) => {
       if (data.from === "driver" && data.audio) {
-        pttIncomingChunksRef.current.push(data.audio);
+        pttIncomingChunksRef.current.push({ audio: data.audio, mimeType: data.mimeType || "audio/webm;codecs=opus" });
       }
     });
     const unsubPttStop = on("ptt:stop", (data: { from: string }) => {
@@ -313,13 +314,14 @@ export default function Dispatcher() {
         pttIncomingChunksRef.current = [];
         if (chunks.length > 0) {
           try {
-            const blobParts = chunks.map((b64) => {
-              const byteString = atob(b64);
+            const mt = chunks[0].mimeType;
+            const blobParts = chunks.map((c) => {
+              const byteString = atob(c.audio);
               const ab = new Uint8Array(byteString.length);
               for (let i = 0; i < byteString.length; i++) ab[i] = byteString.charCodeAt(i);
               return ab;
             });
-            const blob = new Blob(blobParts, { type: "audio/webm;codecs=opus" });
+            const blob = new Blob(blobParts, { type: mt });
             const url = URL.createObjectURL(blob);
             const audio = new Audio(url);
             audio.play().catch((e) => console.error("[PTT] Play error:", e));
@@ -461,14 +463,22 @@ export default function Dispatcher() {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       pttStreamRef.current = stream;
       pttAudioChunksRef.current = [];
-      const recorder = new MediaRecorder(stream, { mimeType: "audio/webm;codecs=opus" });
+      // Detect supported MIME type (Safari doesn't support WebM)
+      const mimeTypes = ["audio/webm;codecs=opus", "audio/webm", "audio/mp4", "audio/ogg;codecs=opus", ""];
+      let selectedMime = "";
+      for (const mt of mimeTypes) {
+        if (mt === "" || MediaRecorder.isTypeSupported(mt)) { selectedMime = mt; break; }
+      }
+      pttMimeTypeRef.current = selectedMime || "audio/webm";
+      const recorderOptions: MediaRecorderOptions = selectedMime ? { mimeType: selectedMime } : {};
+      const recorder = new MediaRecorder(stream, recorderOptions);
       pttMediaRecorderRef.current = recorder;
       recorder.ondataavailable = (e) => {
         if (e.data.size > 0) {
           const reader = new FileReader();
           reader.onloadend = () => {
             const base64 = (reader.result as string).split(",")[1];
-            emit("ptt:audio", { from: "dispatcher", audio: base64 });
+            emit("ptt:audio", { from: "dispatcher", audio: base64, mimeType: pttMimeTypeRef.current });
           };
           reader.readAsDataURL(e.data);
         }
