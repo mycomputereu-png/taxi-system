@@ -511,11 +511,14 @@ export default function DriverApp() {
   }, [drawRouteToClient]);
 
   // PTT start/stop handlers
+  const pttPendingReadsRef = useRef(0);
+
   const pttStart = useCallback(async () => {
     if (!session || !socketRef.current) return;
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       pttStreamRef.current = stream;
+      pttPendingReadsRef.current = 0;
       // Detect supported MIME type (Safari doesn't support WebM)
       const mimeTypes = ["audio/webm;codecs=opus", "audio/webm", "audio/mp4", "audio/ogg;codecs=opus", ""];
       let selectedMime = "";
@@ -528,6 +531,7 @@ export default function DriverApp() {
       pttMediaRecorderRef.current = recorder;
       recorder.ondataavailable = (e) => {
         if (e.data.size > 0) {
+          pttPendingReadsRef.current++;
           const reader = new FileReader();
           reader.onloadend = () => {
             const base64 = (reader.result as string).split(",")[1];
@@ -538,6 +542,7 @@ export default function DriverApp() {
               driverName: session.name,
               driverId: session.driverId,
             });
+            pttPendingReadsRef.current--;
           };
           reader.readAsDataURL(e.data);
         }
@@ -551,17 +556,31 @@ export default function DriverApp() {
   }, [session]);
 
   const pttStop = useCallback(() => {
-    if (pttMediaRecorderRef.current && pttMediaRecorderRef.current.state !== "inactive") {
-      pttMediaRecorderRef.current.stop();
+    const recorder = pttMediaRecorderRef.current;
+    const sock = socketRef.current;
+    const sess = session;
+    if (recorder && recorder.state !== "inactive") {
+      recorder.onstop = () => {
+        const waitAndSend = () => {
+          if (pttPendingReadsRef.current > 0) {
+            setTimeout(waitAndSend, 50);
+            return;
+          }
+          if (sess && sock) {
+            sock.emit("ptt:stop", { from: "driver", driverName: sess.name, driverId: sess.driverId });
+          }
+        };
+        waitAndSend();
+      };
+      recorder.stop();
+    } else if (sess && sock) {
+      sock.emit("ptt:stop", { from: "driver", driverName: sess.name, driverId: sess.driverId });
     }
     if (pttStreamRef.current) {
       pttStreamRef.current.getTracks().forEach((t) => t.stop());
       pttStreamRef.current = null;
     }
     pttMediaRecorderRef.current = null;
-    if (session && socketRef.current) {
-      socketRef.current.emit("ptt:stop", { from: "driver", driverName: session.name, driverId: session.driverId });
-    }
     setPttActive(false);
   }, [session]);
 

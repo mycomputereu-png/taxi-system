@@ -458,11 +458,14 @@ export default function Dispatcher() {
   }, []);
 
   // PTT start/stop handlers
+  const pttPendingReadsRef = useRef(0);
+
   const pttStart = useCallback(async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       pttStreamRef.current = stream;
       pttAudioChunksRef.current = [];
+      pttPendingReadsRef.current = 0;
       // Detect supported MIME type (Safari doesn't support WebM)
       const mimeTypes = ["audio/webm;codecs=opus", "audio/webm", "audio/mp4", "audio/ogg;codecs=opus", ""];
       let selectedMime = "";
@@ -475,10 +478,12 @@ export default function Dispatcher() {
       pttMediaRecorderRef.current = recorder;
       recorder.ondataavailable = (e) => {
         if (e.data.size > 0) {
+          pttPendingReadsRef.current++;
           const reader = new FileReader();
           reader.onloadend = () => {
             const base64 = (reader.result as string).split(",")[1];
             emit("ptt:audio", { from: "dispatcher", audio: base64, mimeType: pttMimeTypeRef.current });
+            pttPendingReadsRef.current--;
           };
           reader.readAsDataURL(e.data);
         }
@@ -492,15 +497,28 @@ export default function Dispatcher() {
   }, [emit]);
 
   const pttStop = useCallback(() => {
-    if (pttMediaRecorderRef.current && pttMediaRecorderRef.current.state !== "inactive") {
-      pttMediaRecorderRef.current.stop();
+    const recorder = pttMediaRecorderRef.current;
+    if (recorder && recorder.state !== "inactive") {
+      recorder.onstop = () => {
+        // Wait for all pending FileReader operations to complete
+        const waitAndSend = () => {
+          if (pttPendingReadsRef.current > 0) {
+            setTimeout(waitAndSend, 50);
+            return;
+          }
+          emit("ptt:stop", { from: "dispatcher" });
+        };
+        waitAndSend();
+      };
+      recorder.stop();
+    } else {
+      emit("ptt:stop", { from: "dispatcher" });
     }
     if (pttStreamRef.current) {
       pttStreamRef.current.getTracks().forEach((t) => t.stop());
       pttStreamRef.current = null;
     }
     pttMediaRecorderRef.current = null;
-    emit("ptt:stop", { from: "dispatcher" });
     setPttActive(false);
   }, [emit]);
 
