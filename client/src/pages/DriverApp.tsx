@@ -110,6 +110,7 @@ export default function DriverApp() {
   const [pttIncoming, setPttIncoming] = useState(false);
   const pttMediaRecorderRef = useRef<MediaRecorder | null>(null);
   const pttStreamRef = useRef<MediaStream | null>(null);
+  const pttIncomingChunksRef = useRef<string[]>([]);
 
   // tRPC
   const loginMut = trpc.driver.login.useMutation({
@@ -342,21 +343,30 @@ export default function DriverApp() {
     });
     s.on("ptt:audio", (data: { from: string; audio: string }) => {
       if (data.from === "dispatcher" && data.audio) {
-        try {
-          const byteString = atob(data.audio);
-          const ab = new ArrayBuffer(byteString.length);
-          const ia = new Uint8Array(ab);
-          for (let i = 0; i < byteString.length; i++) ia[i] = byteString.charCodeAt(i);
-          const blob = new Blob([ab], { type: "audio/webm;codecs=opus" });
-          const url = URL.createObjectURL(blob);
-          const audio = new Audio(url);
-          audio.play().catch(() => {});
-          audio.onended = () => URL.revokeObjectURL(url);
-        } catch (e) { console.error("[PTT] Audio playback error:", e); }
+        pttIncomingChunksRef.current.push(data.audio);
       }
     });
     s.on("ptt:stop", (data: { from: string }) => {
-      if (data.from === "dispatcher") setPttIncoming(false);
+      if (data.from === "dispatcher") {
+        setPttIncoming(false);
+        const chunks = pttIncomingChunksRef.current;
+        pttIncomingChunksRef.current = [];
+        if (chunks.length > 0) {
+          try {
+            const blobParts = chunks.map((b64) => {
+              const byteString = atob(b64);
+              const ab = new Uint8Array(byteString.length);
+              for (let i = 0; i < byteString.length; i++) ab[i] = byteString.charCodeAt(i);
+              return ab;
+            });
+            const blob = new Blob(blobParts, { type: "audio/webm;codecs=opus" });
+            const url = URL.createObjectURL(blob);
+            const audio = new Audio(url);
+            audio.play().catch((e) => console.error("[PTT] Play error:", e));
+            audio.onended = () => URL.revokeObjectURL(url);
+          } catch (e) { console.error("[PTT] Audio playback error:", e); }
+        }
+      }
     });
 
     return () => {
