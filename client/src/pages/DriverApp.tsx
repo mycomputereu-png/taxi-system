@@ -489,9 +489,13 @@ export default function DriverApp() {
       participant: RemoteParticipant
     ) => {
       if (track && track.kind === Track.Kind.Audio) {
-        const el = track.attach();
+        const el = track.attach() as HTMLAudioElement;
         el.id = `lk-audio-${participant.identity}`;
+        el.autoplay = true;
+        el.muted = false;
+        el.volume = 1.0;
         document.body.appendChild(el);
+        void el.play().catch(() => {});
         if (participant.identity === "dispatcher") {
           setPttIncoming(true);
         }
@@ -513,6 +517,17 @@ export default function DriverApp() {
 
     room.on(RoomEvent.TrackSubscribed, handleTrackSubscribed);
     room.on(RoomEvent.TrackUnsubscribed, handleTrackUnsubscribed);
+
+    // Unlock audio playback if the browser blocks autoplay (no recent gesture)
+    const ensureAudioPlayback = () => {
+      void room.startAudio().catch(() => {});
+    };
+    room.on(RoomEvent.AudioPlaybackStatusChanged, () => {
+      if (!room.canPlaybackAudio) {
+        document.addEventListener("pointerdown", ensureAudioPlayback, { once: true });
+        document.addEventListener("touchstart", ensureAudioPlayback, { once: true });
+      }
+    });
 
     // Connect to LiveKit room
     (async () => {
