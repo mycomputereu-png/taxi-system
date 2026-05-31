@@ -848,16 +848,18 @@ async function getClientById_safe(clientId: number) {
 const LIVEKIT_API_KEY = process.env.LIVEKIT_API_KEY || "APItaxi75ff2872f89f";
 const LIVEKIT_API_SECRET = process.env.LIVEKIT_API_SECRET || "cd241534d8e6bf4ecbeab2c402a32c20465a8998dc62ade37a01d3efc3ab7d1b";
 
-export async function generateLivekitToken(identity: string, room: string): Promise<string> {
+export async function generateLivekitToken(identity: string, room: string, metadata?: string): Promise<string> {
   const token = new AccessToken(LIVEKIT_API_KEY, LIVEKIT_API_SECRET, {
     identity,
     ttl: "1h",
+    ...(metadata ? { metadata } : {}),
   });
   token.addGrant({
     roomJoin: true,
     room,
     canPublish: true,
     canSubscribe: true,
+    canUpdateOwnMetadata: true,
   });
   return await token.toJwt();
 }

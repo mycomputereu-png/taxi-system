@@ -41,12 +41,12 @@ async function startServer() {
   // LiveKit token endpoint
   app.post("/api/livekit/token", async (req, res) => {
     try {
-      const { identity, room } = req.body;
+      const { identity, room, metadata } = req.body;
       if (!identity || !room) {
         res.status(400).json({ error: "identity and room are required" });
         return;
       }
-      const token = await generateLivekitToken(identity, room);
+      const token = await generateLivekitToken(identity, room, metadata);
       res.json({ token });
     } catch (err) {
       console.error("[LiveKit] Token generation error:", err);

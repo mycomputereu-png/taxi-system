@@ -17,7 +17,7 @@ import {
 } from "lucide-react";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { playNewRideSound } from "@/lib/alerts";
-import { Room, RoomEvent, Track, RemoteTrackPublication, RemoteParticipant } from "livekit-client";
+import { Room, RoomEvent, Track, RemoteTrackPublication, RemoteParticipant, TrackPublication, Participant } from "livekit-client";
 
 
 type DriverMarker = {
@@ -423,6 +423,12 @@ export default function Dispatcher() {
     const room = new Room();
     livekitRoomRef.current = room;
 
+    const driverFromParticipant = (participant: Participant) => {
+      const name = participant.identity.replace("driver-", "");
+      const idMatch = participant.metadata?.match(/driverId:(\d+)/);
+      return { driverName: name, driverId: idMatch ? parseInt(idMatch[1]) : 0 };
+    };
+
     // Handle incoming audio from drivers
     const handleTrackSubscribed = (
       track: RemoteTrackPublication["track"],
@@ -437,9 +443,11 @@ export default function Dispatcher() {
         el.volume = 1.0;
         document.body.appendChild(el);
         void el.play().catch(() => {});
-        const name = participant.identity.replace("driver-", "");
-        const idMatch = participant.metadata?.match(/driverId:(\d+)/);
-        setPttIncoming({ driverName: name, driverId: idMatch ? parseInt(idMatch[1]) : 0 });
+        if (publication.isMuted) {
+          setPttIncoming(null);
+        } else {
+          setPttIncoming(driverFromParticipant(participant));
+        }
       }
     };
 
@@ -454,8 +462,23 @@ export default function Dispatcher() {
       }
     };
 
+    // setMicrophoneEnabled(false) mutes without unpublishing, so a driver's
+    // talking start/stop arrives as unmute/mute events, not subscribe/unsubscribe.
+    const handleTrackMuted = (publication: TrackPublication, participant: Participant) => {
+      if (publication.kind === Track.Kind.Audio && participant.identity.startsWith("driver-")) {
+        setPttIncoming(null);
+      }
+    };
+    const handleTrackUnmuted = (publication: TrackPublication, participant: Participant) => {
+      if (publication.kind === Track.Kind.Audio && participant.identity.startsWith("driver-")) {
+        setPttIncoming(driverFromParticipant(participant));
+      }
+    };
+
     room.on(RoomEvent.TrackSubscribed, handleTrackSubscribed);
     room.on(RoomEvent.TrackUnsubscribed, handleTrackUnsubscribed);
+    room.on(RoomEvent.TrackMuted, handleTrackMuted);
+    room.on(RoomEvent.TrackUnmuted, handleTrackUnmuted);
 
     // Unlock audio playback if the browser blocks autoplay (no recent gesture)
     const ensureAudioPlayback = () => {

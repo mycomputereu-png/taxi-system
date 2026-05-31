@@ -11,7 +11,7 @@ import { io } from "socket.io-client";
 import { User, Lock, MapPin, Car, CheckCircle, XCircle, Navigation, Phone, Clock, Star, Mic } from "lucide-react";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { playRideAssignedSound } from "@/lib/alerts";
-import { Room, RoomEvent, Track, RemoteTrackPublication, RemoteParticipant } from "livekit-client";
+import { Room, RoomEvent, Track, RemoteTrackPublication, RemoteParticipant, TrackPublication, Participant } from "livekit-client";
 
 type DriverSession = { token: string; driverId: number; name: string; username: string };
 
@@ -497,7 +497,7 @@ export default function DriverApp() {
         document.body.appendChild(el);
         void el.play().catch(() => {});
         if (participant.identity === "dispatcher") {
-          setPttIncoming(true);
+          setPttIncoming(!publication.isMuted);
         }
       }
     };
@@ -515,8 +515,23 @@ export default function DriverApp() {
       }
     };
 
+    // setMicrophoneEnabled(false) mutes the track without unpublishing, so the
+    // receiver only gets mute/unmute events while talking starts/stops.
+    const handleTrackMuted = (publication: TrackPublication, participant: Participant) => {
+      if (participant.identity === "dispatcher" && publication.kind === Track.Kind.Audio) {
+        setPttIncoming(false);
+      }
+    };
+    const handleTrackUnmuted = (publication: TrackPublication, participant: Participant) => {
+      if (participant.identity === "dispatcher" && publication.kind === Track.Kind.Audio) {
+        setPttIncoming(true);
+      }
+    };
+
     room.on(RoomEvent.TrackSubscribed, handleTrackSubscribed);
     room.on(RoomEvent.TrackUnsubscribed, handleTrackUnsubscribed);
+    room.on(RoomEvent.TrackMuted, handleTrackMuted);
+    room.on(RoomEvent.TrackUnmuted, handleTrackUnmuted);
 
     // Unlock audio playback if the browser blocks autoplay (no recent gesture)
     const ensureAudioPlayback = () => {
@@ -538,6 +553,9 @@ export default function DriverApp() {
           body: JSON.stringify({
             identity: `driver-${session.name}`,
             room: "ptt-room",
+            // driverId is baked into the token so the dispatcher can identify
+            // the caller without a runtime setMetadata (which the grant rejects)
+            metadata: `driverId:${session.driverId}`,
           }),
         });
         const { token } = await resp.json();
@@ -545,8 +563,6 @@ export default function DriverApp() {
         await room.connect(wsUrl, token, {
           autoSubscribe: true,
         });
-        // Set metadata with driverId for dispatcher to identify
-        await room.localParticipant.setMetadata(`driverId:${session.driverId}`);
         livekitConnectedRef.current = true;
         console.log(`[LiveKit] Driver ${session.name} connected to ptt-room`);
       } catch (err) {
