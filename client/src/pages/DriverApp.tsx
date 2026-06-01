@@ -11,6 +11,7 @@ import { io } from "socket.io-client";
 import { User, Lock, MapPin, Car, CheckCircle, XCircle, Navigation, Phone, Clock, Star, Mic } from "lucide-react";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { playRideAssignedSound } from "@/lib/alerts";
+import { useWakeLock } from "@/hooks/useWakeLock";
 import { Room, RoomEvent, Track, RemoteTrackPublication, RemoteParticipant, TrackPublication, Participant } from "livekit-client";
 
 type DriverSession = { token: string; driverId: number; name: string; username: string };
@@ -75,6 +76,8 @@ type RideWithClient = {
 };
 
 export default function DriverApp() {
+  // Keep the screen awake while the driver app is open in the foreground.
+  useWakeLock(true);
   // Auth
   const [session, setSession] = useState<DriverSession | null>(() => loadSession());
   const [username, setUsername] = useState("");

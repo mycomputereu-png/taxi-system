@@ -10,6 +10,7 @@ import { toast } from "sonner";
 import { useSocket } from "@/hooks/useSocket";
 import { Phone, MapPin, Car, Clock, CheckCircle, XCircle, Navigation, User } from "lucide-react";
 import { ThemeToggle } from "@/components/ThemeToggle";
+import { useWakeLock } from "@/hooks/useWakeLock";
 import ClientProfile from "./ClientProfile";
 
 type ClientSession = { token: string; clientId: number; phone: string };
@@ -93,6 +94,8 @@ export default function ClientApp() {
 
   // Ride state
   const [rideStatus, setRideStatus] = useState<RideStatus>("idle");
+  // Keep the screen awake only while a ride is active (saves battery otherwise).
+  useWakeLock(["pending", "assigned", "accepted", "in_progress"].includes(rideStatus));
   const [rideId, setRideId] = useState<number | null>(null);
   const [driverInfo, setDriverInfo] = useState<any>(null);
   const [estimatedArrival, setEstimatedArrival] = useState<number | null>(null);

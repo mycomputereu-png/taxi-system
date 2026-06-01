@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { playNewRideSound } from "@/lib/alerts";
+import { useWakeLock } from "@/hooks/useWakeLock";
 import { Room, RoomEvent, Track, RemoteTrackPublication, RemoteParticipant, TrackPublication, Participant } from "livekit-client";
 
 
@@ -78,6 +79,8 @@ type RideWithClientDriver = {
 };
 
 export default function Dispatcher() {
+  // Keep the screen awake while the dispatcher console is open in the foreground.
+  useWakeLock(true);
   const { user, loading, isAuthenticated, logout, refresh } = useAuth();
   const { emit, on, socket: socketRef } = useSocket();
 
