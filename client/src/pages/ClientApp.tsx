@@ -665,7 +665,7 @@ export default function ClientApp() {
       </div>
 
       {/* Bottom Panel */}
-      <div className="bg-white dark:bg-gray-900 border-t border-gray-200 dark:border-gray-800 p-4">
+      <div className="bg-white dark:bg-gray-900 border-t border-gray-200 dark:border-gray-800 p-4 max-h-[55vh] overflow-y-auto md:max-h-none [&>*]:mx-auto [&>*]:w-full [&>*]:max-w-2xl">
         {rideStatus === "idle" || rideStatus === "rejected" || rideStatus === "cancelled" ? (
           <div className="flex flex-col gap-3">
             {(rideStatus === "rejected" || rideStatus === "cancelled") && (
@@ -763,8 +763,8 @@ export default function ClientApp() {
       
       {/* Driver Arrival Alert Modal */}
       {showArrivalAlert && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <Card className="bg-gradient-to-br from-green-900 to-green-800 border-green-600 w-96 shadow-2xl">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <Card className="bg-gradient-to-br from-green-900 to-green-800 border-green-600 w-full max-w-sm max-h-[90vh] overflow-y-auto shadow-2xl">
             <CardHeader className="text-center">
               <CardTitle className="text-white text-2xl flex items-center justify-center gap-2">
                 <CheckCircle className="w-8 h-8 text-green-400" />

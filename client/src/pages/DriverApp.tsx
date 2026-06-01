@@ -742,7 +742,7 @@ export default function DriverApp() {
         <MapView onMapReady={handleMapReady} className="w-full h-full" />
 
         {/* Map Legend */}
-        <div className="absolute top-4 right-4 bg-white/90 dark:bg-gray-900/90 rounded-lg p-3 text-xs text-gray-900 dark:text-white border border-gray-300 dark:border-gray-700 z-[1000]">
+        <div className="absolute top-2 right-2 md:top-4 md:right-4 bg-white/90 dark:bg-gray-900/90 rounded-lg p-2 md:p-3 text-[10px] md:text-xs text-gray-900 dark:text-white border border-gray-300 dark:border-gray-700 z-[1000]">
           <div className="font-semibold mb-2 text-yellow-400">Legendă</div>
           <div className="flex items-center gap-2 mb-2">
             <div className="w-3 h-3 bg-amber-500 rounded-full"></div>
@@ -776,7 +776,7 @@ export default function DriverApp() {
       </div>
 
       {/* Bottom Panel */}
-      <div className="bg-white dark:bg-gray-900 border-t border-gray-200 dark:border-gray-800 p-4">
+      <div className="bg-white dark:bg-gray-900 border-t border-gray-200 dark:border-gray-800 p-4 max-h-[55vh] overflow-y-auto md:max-h-none">
         {/* Pending ride notification */}
         {pendingRide && !rideAccepted && (
           <div className="flex flex-col gap-3">
@@ -903,8 +903,8 @@ export default function DriverApp() {
 
       {/* Rating Modal */}
       {showRatingModal && activeRide && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <Card className="w-96 bg-white dark:bg-gray-900 border-gray-300 dark:border-gray-700">
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <Card className="w-full max-w-sm max-h-[90vh] overflow-y-auto bg-white dark:bg-gray-900 border-gray-300 dark:border-gray-700">
             <CardHeader>
               <CardTitle className="text-white">Evaluează clientul</CardTitle>
             </CardHeader>
@@ -967,8 +967,8 @@ export default function DriverApp() {
 
       {/* Panic Confirmation Modal */}
       {showPanicConfirm && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <Card className="w-96 bg-white dark:bg-gray-900 border-red-700">
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <Card className="w-full max-w-sm max-h-[90vh] overflow-y-auto bg-white dark:bg-gray-900 border-red-700">
             <CardHeader>
               <CardTitle className="text-red-400 flex items-center gap-2">
                 <span className="text-2xl">🚨</span>

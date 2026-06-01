@@ -555,8 +555,8 @@ export default function Dispatcher() {
 
   if (!isAuthenticated) {
     return (
-      <div className="min-h-screen bg-gray-100 dark:bg-gray-950 flex items-center justify-center">
-        <Card className="w-96 bg-white dark:bg-gray-900 border-gray-300 dark:border-gray-700">
+      <div className="min-h-screen bg-gray-100 dark:bg-gray-950 flex items-center justify-center p-4">
+        <Card className="w-full max-w-sm bg-white dark:bg-gray-900 border-gray-300 dark:border-gray-700">
           <CardHeader>
             <CardTitle className="text-gray-900 dark:text-white text-center text-2xl">🚖 Dispatcher</CardTitle>
           </CardHeader>
@@ -665,9 +665,9 @@ export default function Dispatcher() {
         </div>
       )}
 
-      <div className="flex flex-1 overflow-hidden">
+      <div className="flex flex-1 overflow-hidden flex-col md:flex-row">
         {/* Sidebar */}
-        <div className="w-80 md:w-96 bg-white dark:bg-gray-900 border-r border-gray-200 dark:border-gray-800 flex flex-col overflow-hidden">
+        <div className="w-full md:w-80 lg:w-96 flex-1 md:flex-none min-h-0 bg-white dark:bg-gray-900 border-b md:border-b-0 md:border-r border-gray-200 dark:border-gray-800 flex flex-col overflow-hidden">
           {/* Stats Bar */}
           <div className="px-3 py-3 border-b border-gray-200 dark:border-gray-800 grid grid-cols-3 gap-2">
             <Card className="bg-gray-50 dark:bg-gray-800 border-gray-200 dark:border-gray-700 p-2">
@@ -1071,11 +1071,11 @@ export default function Dispatcher() {
         </div>
 
         {/* Map */}
-        <div className="flex-1 relative flex flex-col" style={{ isolation: "isolate" }}>
+        <div className="flex-1 relative flex flex-col min-h-0" style={{ isolation: "isolate" }}>
           <MapView onMapReady={handleMapReady} className="flex-1 w-full" />
 
           {/* Map Legend */}
-          <div className="absolute top-4 right-4 bg-gray-900 bg-opacity-90 rounded-lg p-3 text-xs text-white border border-gray-700 z-[1000]">
+          <div className="absolute top-2 right-2 md:top-4 md:right-4 bg-gray-900 bg-opacity-90 rounded-lg p-2 md:p-3 text-[10px] md:text-xs text-white border border-gray-700 z-[1000]">
             <div className="font-semibold mb-2 text-yellow-400">Legendă</div>
             <div className="flex items-center gap-2 mb-2">
               <div className="w-3 h-3 bg-green-500 rounded-full"></div>
@@ -1095,7 +1095,7 @@ export default function Dispatcher() {
 
       {/* Client Profile Dialog */}
       <Dialog open={!!selectedClientId} onOpenChange={(open) => !open && setSelectedClientId(null)}>
-        <DialogContent className="bg-gray-900 border-gray-700 text-white max-h-screen overflow-y-auto max-w-2xl">
+        <DialogContent className="bg-gray-900 border-gray-700 text-white max-h-[90vh] overflow-y-auto w-[calc(100vw-2rem)] max-w-2xl">
           {clientProfileQuery.isLoading ? (
             <div className="flex items-center justify-center py-8">
               <p className="text-gray-400">Se încarcă profil...</p>
