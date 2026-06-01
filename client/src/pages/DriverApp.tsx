@@ -680,14 +680,14 @@ export default function DriverApp() {
   // ─── Main Driver App ──────────────────────────────────────────────────────
 
   return (
-    <div className="h-screen bg-gray-100 dark:bg-gray-950 flex flex-col">
+    <div className="h-screen bg-gray-100 dark:bg-gray-950 flex flex-col overflow-x-hidden">
       {/* Header */}
-      <header className="bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800 px-4 py-3 flex items-center justify-between">
-        <div className="flex items-center gap-2">
+      <header className="bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800 px-3 md:px-4 py-3 flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2 min-w-0">
           <span className="text-xl">🚗</span>
-          <span className="text-yellow-600 dark:text-yellow-400 font-bold">{session.name}</span>
+          <span className="text-yellow-600 dark:text-yellow-400 font-bold truncate">{session.name}</span>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-1.5 md:gap-3 flex-shrink-0">
           {/* PTT Button */}
           <button
             onMouseDown={pttStart}
@@ -714,7 +714,7 @@ export default function DriverApp() {
               setDriverAvailable(!driverAvailable);
               toast.success(`Status: ${!driverAvailable ? "Disponibil" : "Indisponibil"}`);
             }}
-            className={`text-xs font-semibold px-4 py-2 ${
+            className={`text-xs font-semibold px-2.5 md:px-4 py-2 whitespace-nowrap ${
               rideAccepted || activeRide ? "bg-orange-700 hover:bg-orange-800" :
               pendingRide ? "bg-blue-700 hover:bg-blue-800" :
               driverAvailable ? "bg-green-700 hover:bg-green-800" : "bg-red-700 hover:bg-red-800"

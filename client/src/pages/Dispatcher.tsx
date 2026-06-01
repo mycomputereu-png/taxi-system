@@ -606,9 +606,9 @@ export default function Dispatcher() {
   const assignedRides = activeRidesQuery.data?.filter((r) => r.status !== "pending") ?? [];
 
   return (
-    <div className="min-h-screen bg-gray-100 dark:bg-gray-950 text-gray-900 dark:text-white flex flex-col">
+    <div className="h-screen bg-gray-100 dark:bg-gray-950 text-gray-900 dark:text-white flex flex-col overflow-x-hidden">
       {/* Header */}
-      <header className="bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800 px-3 md:px-6 py-3 flex items-center justify-between">
+      <header className="bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800 px-3 md:px-6 py-3 flex items-center justify-between gap-2 flex-shrink-0">
         <div className="flex items-center gap-2 md:gap-3">
           <span className="text-xl md:text-2xl">🚖</span>
           <h1 className="text-base md:text-xl font-bold text-yellow-600 dark:text-yellow-400">Taxi Dispatcher</h1>

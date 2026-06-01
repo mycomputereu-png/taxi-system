@@ -610,15 +610,15 @@ export default function ClientApp() {
   const isRideActive = ["pending", "assigned", "accepted", "in_progress"].includes(rideStatus);
 
   return (
-    <div className="h-screen bg-gray-100 dark:bg-gray-950 flex flex-col">
+    <div className="h-screen bg-gray-100 dark:bg-gray-950 flex flex-col overflow-x-hidden">
       {/* Header */}
-      <header className="bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800 px-4 py-3 flex items-center justify-between flex-shrink-0">
-        <div className="flex items-center gap-2">
+      <header className="bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800 px-3 md:px-4 py-3 flex items-center justify-between gap-2 flex-shrink-0">
+        <div className="flex items-center gap-2 min-w-0">
           <span className="text-xl">🚖</span>
           <span className="text-yellow-600 dark:text-yellow-400 font-bold">Taxi App</span>
         </div>
-        <div className="flex items-center gap-3">
-          <span className="text-gray-500 dark:text-gray-400 text-sm">{session.phone}</span>
+        <div className="flex items-center gap-1.5 md:gap-3 flex-shrink-0">
+          <span className="text-gray-500 dark:text-gray-400 text-sm truncate max-w-[40vw]">{session.phone}</span>
           <ThemeToggle />
           <Button variant="ghost" size="sm" onClick={handleLogout} className="text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white text-xs">
             Ieșire
