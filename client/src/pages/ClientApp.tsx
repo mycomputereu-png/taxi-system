@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import L from "leaflet";
 import { trpc } from "@/lib/trpc";
-import { MapView, createSvgIcon, fetchOSRMRoute } from "@/components/Map";
+import { MapView, createSvgIcon, fetchOSRMRoute, reverseGeocode } from "@/components/Map";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -35,6 +35,10 @@ function clearSession() {
 }
 
 type RideStatus = "idle" | "requesting" | "pending" | "assigned" | "accepted" | "in_progress" | "completed" | "rejected" | "cancelled";
+
+// GPS gating: don't allow an order until we have a precise, fresh fix.
+const GPS_ACCURACY_THRESHOLD_M = 30; // meters; reject fixes coarser than this for ordering
+const MAX_LOCATION_AGE_MS = 90_000; // 1.5 min; reject stale last-known-location fixes
 
 type RideWithDriver = {
   id: number;
@@ -118,6 +122,16 @@ export default function ClientApp() {
   const routePolylineRef = useRef<L.Polyline | null>(null);
   const locationWatchRef = useRef<number | null>(null);
   const [clientPos, setClientPos] = useState<{ lat: number; lng: number } | null>(null);
+  // GPS accuracy/freshness state used to gate the order button.
+  const [gpsAccuracy, setGpsAccuracy] = useState<number | null>(null);
+  const [gpsError, setGpsError] = useState<string | null>(null);
+  const [clientAddress, setClientAddress] = useState<string | null>(null);
+  const [addressLoading, setAddressLoading] = useState(false);
+  const lastGeocodedRef = useRef<{ lat: number; lng: number } | null>(null);
+
+  // A precise, usable fix: we have coords and accuracy is within threshold.
+  const gpsReady =
+    clientPos !== null && gpsAccuracy !== null && gpsAccuracy <= GPS_ACCURACY_THRESHOLD_M;
 
   // tRPC
   const sendOtpMut = trpc.clientApp.sendOtp.useMutation({
@@ -391,33 +405,42 @@ export default function ClientApp() {
   useEffect(() => {
     if (!session) return;
 
-    // Try real geolocation first
     if (navigator.geolocation) {
+      // Ask for a high-accuracy fix immediately; maximumAge: 0 so we never
+      // reuse a stale last-known-location. Each new fix refines accuracy.
       locationWatchRef.current = navigator.geolocation.watchPosition(
         (pos) => {
-          const { latitude: lat, longitude: lng } = pos.coords;
+          const { latitude: lat, longitude: lng, accuracy } = pos.coords;
+          const ageMs = Date.now() - pos.timestamp;
+          // Ignore stale last-known-location fixes (older than ~1.5 min).
+          if (ageMs > MAX_LOCATION_AGE_MS) {
+            console.warn("[GPS] Ignoring stale fix, age(ms):", ageMs);
+            return;
+          }
+          setGpsError(null);
+          setGpsAccuracy(accuracy);
+          // Move the map/marker so the user sees progress, even on a coarse fix.
           setClientPos({ lat, lng });
-          emit("location:client", { lat, lng });
           updateClientMarker(lat, lng);
+          // Only share precise fixes with the dispatcher (never a default pin).
+          if (accuracy <= GPS_ACCURACY_THRESHOLD_M) {
+            emit("location:client", { lat, lng });
+          }
+          console.log("[GPS] fix lat:", lat, "lng:", lng, "accuracy(m):", Math.round(accuracy));
         },
         (err) => {
           console.warn("GPS error:", err);
-          // Fallback: use default location (Bucharest center) for demo
-          const defaultLat = 44.4268;
-          const defaultLng = 26.1025;
-          setClientPos({ lat: defaultLat, lng: defaultLng });
-          emit("location:client", { lat: defaultLat, lng: defaultLng });
-          updateClientMarker(defaultLat, defaultLng);
+          // No silent Bucharest fallback: keep the order button blocked and tell the user.
+          setGpsError(
+            err.code === err.PERMISSION_DENIED
+              ? "Permite accesul la locație pentru a comanda."
+              : "Nu s-a putut determina locația. Verifică GPS-ul."
+          );
         },
-        { enableHighAccuracy: true, maximumAge: 5000, timeout: 10000 }
+        { enableHighAccuracy: true, maximumAge: 0, timeout: 20000 }
       );
     } else {
-      // Fallback if geolocation not available
-      const defaultLat = 44.4268;
-      const defaultLng = 26.1025;
-      setClientPos({ lat: defaultLat, lng: defaultLng });
-      emit("location:client", { lat: defaultLat, lng: defaultLng });
-      updateClientMarker(defaultLat, defaultLng);
+      setGpsError("Dispozitivul nu suportă geolocația.");
     }
 
     return () => {
@@ -427,6 +450,33 @@ export default function ClientApp() {
     };
   }, [session, emit]);
 
+  // Reverse geocode the precise fix into a real address (instead of a fake one).
+  useEffect(() => {
+    if (!gpsReady || !clientPos) return;
+    const prev = lastGeocodedRef.current;
+    // Only re-geocode when the position moved meaningfully (~25m).
+    if (
+      prev &&
+      Math.abs(prev.lat - clientPos.lat) < 0.0002 &&
+      Math.abs(prev.lng - clientPos.lng) < 0.0002
+    ) {
+      return;
+    }
+    lastGeocodedRef.current = { lat: clientPos.lat, lng: clientPos.lng };
+    let cancelled = false;
+    setAddressLoading(true);
+    reverseGeocode(clientPos.lat, clientPos.lng)
+      .then((addr) => {
+        if (!cancelled) setClientAddress(addr);
+      })
+      .finally(() => {
+        if (!cancelled) setAddressLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [gpsReady, clientPos]);
+
   const handleMapReady = useCallback((map: L.Map) => {
     if (!map) {
       console.error("Map not initialized");
@@ -434,23 +484,23 @@ export default function ClientApp() {
     }
     mapRef.current = map;
     setMapReady(true);
-    
+
     if (clientPos) {
       map.setView([clientPos.lat, clientPos.lng], 15);
       updateClientMarker(clientPos.lat, clientPos.lng);
     } else {
+      // Center the map on a best-effort fix purely for display; ordering still
+      // requires an accurate fix from the high-accuracy watch above.
       navigator.geolocation?.getCurrentPosition(
         (pos) => {
           const lat = pos.coords.latitude;
           const lng = pos.coords.longitude;
           map.setView([lat, lng], 15);
-          setClientPos({ lat, lng });
-          updateClientMarker(lat, lng);
         },
         (error) => {
           console.warn("Geolocation error:", error);
-          map.setView([44.4268, 26.1025], 13);
-        }
+        },
+        { enableHighAccuracy: true, maximumAge: 0, timeout: 20000 }
       );
     }
   }, [clientPos, updateClientMarker]);
@@ -458,6 +508,12 @@ export default function ClientApp() {
   const handleCallTaxi = () => {
     if (!session || !clientPos) {
       toast.error("Activați GPS-ul pentru a chema taxi");
+      return;
+    }
+    // Block ordering until we have a precise, fresh fix to avoid sending a
+    // default/stale location (e.g. Bucharest) to the dispatcher.
+    if (!gpsReady) {
+      toast.error("Se determină locația exactă... așteaptă câteva secunde.");
       return;
     }
     setRideStatus("requesting");
@@ -471,7 +527,7 @@ export default function ClientApp() {
       token: session.token,
       clientLat: clientPos.lat,
       clientLng: clientPos.lng,
-      clientAddress: "Locația curentă",
+      clientAddress: clientAddress || "Locația curentă",
     });
   };
 
@@ -490,6 +546,8 @@ export default function ClientApp() {
     const randomLat = baseLat + (Math.random() - 0.5) * 0.05;
     const randomLng = baseLng + (Math.random() - 0.5) * 0.05;
     setClientPos({ lat: randomLat, lng: randomLng });
+    setGpsAccuracy(10); // mark the simulated fix as precise so the button enables
+    setGpsError(null);
     emit("location:client", { lat: randomLat, lng: randomLng });
     updateClientMarker(randomLat, randomLng);
     toast.success("Locație simulată pentru test");
@@ -678,19 +736,45 @@ export default function ClientApp() {
                 </p>
               </div>
             )}
+            {/* Live address / GPS status */}
+            <div className="flex items-start gap-2 text-sm">
+              <MapPin className={`w-4 h-4 mt-0.5 shrink-0 ${gpsReady ? "text-green-500" : "text-yellow-500"}`} />
+              <div className="min-w-0">
+                {gpsReady ? (
+                  <p className="text-gray-900 dark:text-white truncate">
+                    {addressLoading || !clientAddress ? "Se caută locația ta..." : clientAddress}
+                  </p>
+                ) : gpsError ? (
+                  <p className="text-red-500">{gpsError}</p>
+                ) : (
+                  <p className="text-gray-500 dark:text-gray-400">Se caută locația ta...</p>
+                )}
+                {gpsAccuracy !== null && (
+                  <p className="text-gray-400 text-xs">Precizie GPS: ±{Math.round(gpsAccuracy)} m</p>
+                )}
+              </div>
+            </div>
             <Button
-              className="w-full bg-yellow-500 hover:bg-yellow-600 text-black font-bold text-xl py-8 rounded-2xl shadow-lg"
+              className="w-full bg-yellow-500 hover:bg-yellow-600 text-black font-bold text-xl py-8 rounded-2xl shadow-lg disabled:opacity-60 disabled:cursor-not-allowed"
               onClick={handleCallTaxi}
-              disabled={requestRideMut.isPending || !clientPos}
+              disabled={requestRideMut.isPending || !gpsReady}
             >
-              <Car className="w-6 h-6 mr-3" />
-              {requestRideMut.isPending ? "Se trimite..." : "Cheamă Taxi"}
+              {!gpsReady ? (
+                <>
+                  <div className="w-5 h-5 mr-3 border-2 border-black/40 border-t-transparent rounded-full animate-spin"></div>
+                  Se determină locația exactă...
+                </>
+              ) : (
+                <>
+                  <Car className="w-6 h-6 mr-3" />
+                  {requestRideMut.isPending ? "Se trimite..." : "Cheamă Taxi"}
+                </>
+              )}
             </Button>
-            {!clientPos && (
+            {!gpsReady && (
               <div className="flex flex-col gap-2">
                 <p className="text-gray-500 text-xs text-center">
-                  <MapPin className="w-3 h-3 inline mr-1" />
-                  Activați GPS-ul pentru a chema taxi
+                  Așteaptă fixarea GPS-ului (sub {GPS_ACCURACY_THRESHOLD_M} m) pentru a comanda corect.
                 </p>
                 <Button
                   variant="outline"

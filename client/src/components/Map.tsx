@@ -90,6 +90,29 @@ export async function fetchOSRMRoute(
   return null;
 }
 
+/** Reverse geocode coordinates to a human-readable address (free, no API key) */
+export async function reverseGeocode(lat: number, lng: number): Promise<string | null> {
+  try {
+    const url = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}&zoom=18&addressdetails=1&accept-language=ro`;
+    const res = await fetch(url, { headers: { Accept: "application/json" } });
+    const data = await res.json();
+    if (data && data.address) {
+      const a = data.address;
+      const road = a.road || a.pedestrian || a.footway || a.neighbourhood || "";
+      const number = a.house_number ? ` ${a.house_number}` : "";
+      const city = a.city || a.town || a.village || a.municipality || a.county || "";
+      const parts = [road ? `${road}${number}` : "", city].filter(Boolean);
+      if (parts.length) return parts.join(", ");
+      if (data.display_name) return data.display_name.split(",").slice(0, 2).join(",").trim();
+    } else if (data && data.display_name) {
+      return data.display_name.split(",").slice(0, 2).join(",").trim();
+    }
+  } catch (e) {
+    console.error("[Nominatim] Reverse geocode error:", e);
+  }
+  return null;
+}
+
 interface MapViewProps {
   className?: string;
   initialCenter?: { lat: number; lng: number };
