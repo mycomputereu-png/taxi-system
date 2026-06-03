@@ -1,13 +1,16 @@
 import { useEffect, useRef, useState, useCallback } from "react";
+import L from "leaflet";
 import { trpc } from "@/lib/trpc";
-import { MapView } from "@/components/Map";
+import { MapView, createSvgIcon, fetchOSRMRoute, reverseGeocode } from "@/components/Map";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import { useSocket } from "@/hooks/useSocket";
-import { Phone, MapPin, Car, Clock, CheckCircle, XCircle, Navigation, User } from "lucide-react";
+import { Phone, MapPin, Car, Clock, CheckCircle, XCircle, Navigation, User, Lock } from "lucide-react";
+import { ThemeToggle } from "@/components/ThemeToggle";
+import { useWakeLock } from "@/hooks/useWakeLock";
 import ClientProfile from "./ClientProfile";
 
 type ClientSession = { token: string; clientId: number; phone: string };
@@ -32,6 +35,10 @@ function clearSession() {
 }
 
 type RideStatus = "idle" | "requesting" | "pending" | "assigned" | "accepted" | "in_progress" | "completed" | "rejected" | "cancelled";
+
+// GPS gating: don't allow an order until we have a precise, fresh fix.
+const GPS_ACCURACY_THRESHOLD_M = 30; // meters; reject fixes coarser than this for ordering
+const MAX_LOCATION_AGE_MS = 90_000; // 1.5 min; reject stale last-known-location fixes
 
 type RideWithDriver = {
   id: number;
@@ -81,16 +88,17 @@ export default function ClientApp() {
       emit("auth:client", { token: session.token });
     }
   }, [session, emit]);
+  const [authMode, setAuthMode] = useState<"login" | "register">("login");
   const [phone, setPhone] = useState("");
-  const [otp, setOtp] = useState("");
-  const [otpSent, setOtpSent] = useState(false);
-  const [devOtp, setDevOtp] = useState<string | null>(null);
-  const [name, setName] = useState("");
-  const [nameSubmitted, setNameSubmitted] = useState(false);
-  const [tempToken, setTempToken] = useState<string | null>(null);
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [firstName, setFirstName] = useState(""); // Nume
+  const [lastName, setLastName] = useState(""); // Prenume
 
   // Ride state
   const [rideStatus, setRideStatus] = useState<RideStatus>("idle");
+  // Keep the screen awake only while a ride is active (saves battery otherwise).
+  useWakeLock(["pending", "assigned", "accepted", "in_progress"].includes(rideStatus));
   const [rideId, setRideId] = useState<number | null>(null);
   const [driverInfo, setDriverInfo] = useState<any>(null);
   const [estimatedArrival, setEstimatedArrival] = useState<number | null>(null);
@@ -107,42 +115,46 @@ export default function ClientApp() {
 
   // Map state
   const [mapReady, setMapReady] = useState(false);
-  const mapRef = useRef<google.maps.Map | null>(null);
-  const clientMarkerRef = useRef<google.maps.Marker | null>(null);
-  const driverMarkerRef = useRef<google.maps.Marker | null>(null);
-  const directionsRendererRef = useRef<google.maps.DirectionsRenderer | null>(null);
+  const mapRef = useRef<L.Map | null>(null);
+  const clientMarkerRef = useRef<L.Marker | null>(null);
+  const driverMarkerRef = useRef<L.Marker | null>(null);
+  const routePolylineRef = useRef<L.Polyline | null>(null);
   const locationWatchRef = useRef<number | null>(null);
   const [clientPos, setClientPos] = useState<{ lat: number; lng: number } | null>(null);
+  // GPS accuracy/freshness state used to gate the order button.
+  const [gpsAccuracy, setGpsAccuracy] = useState<number | null>(null);
+  const [gpsError, setGpsError] = useState<string | null>(null);
+  const [clientAddress, setClientAddress] = useState<string | null>(null);
+  const [addressLoading, setAddressLoading] = useState(false);
+  const lastGeocodedRef = useRef<{ lat: number; lng: number } | null>(null);
+
+  // A precise, usable fix: we have coords and accuracy is within threshold.
+  const gpsReady =
+    clientPos !== null && gpsAccuracy !== null && gpsAccuracy <= GPS_ACCURACY_THRESHOLD_M;
 
   // tRPC
-  const sendOtpMut = trpc.clientApp.sendOtp.useMutation({
+  const handleAuthSuccess = (data: { token: string; client: { id: number; phone: string } }) => {
+    const s: ClientSession = {
+      token: data.token,
+      clientId: data.client?.id ?? 0,
+      phone: data.client?.phone ?? phone,
+    };
+    saveSession(s);
+    setSession(s);
+  };
+
+  const registerMut = trpc.clientApp.register.useMutation({
     onSuccess: (data) => {
-      setOtpSent(true);
-      setDevOtp(data.code ?? null);
-      toast.success("Cod OTP trimis! (demo: codul apare mai jos)");
+      handleAuthSuccess(data);
+      toast.success("Cont creat cu succes!");
     },
     onError: (e) => toast.error(e.message),
   });
 
-  const verifyOtpMut = trpc.clientApp.verifyOtp.useMutation({
+  const loginMut = trpc.clientApp.login.useMutation({
     onSuccess: (data) => {
-      setTempToken(data.token);
-      setNameSubmitted(false);
-      setName("");
+      handleAuthSuccess(data);
       toast.success("Autentificat cu succes!");
-    },
-    onError: (e) => toast.error(e.message),
-  });
-  const updateNameMut = trpc.clientApp.updateClientName.useMutation({
-    onSuccess: () => {
-      if (tempToken) {
-        const s: ClientSession = { token: tempToken, clientId: 0, phone };
-        saveSession(s);
-        setSession(s);
-      }
-      setNameSubmitted(true);
-      setTempToken(null);
-      toast.success("Nume salvat cu succes!");
     },
     onError: (e) => toast.error(e.message),
   });
@@ -162,22 +174,14 @@ export default function ClientApp() {
   const updateClientMarker = useCallback((lat: number, lng: number) => {
     if (!mapRef.current) return;
     if (!clientMarkerRef.current) {
-      clientMarkerRef.current = new google.maps.Marker({
-        map: mapRef.current,
-        icon: {
-          path: google.maps.SymbolPath.CIRCLE,
-          scale: 10,
-          fillColor: "#3b82f6",
-          fillOpacity: 1,
-          strokeColor: "#fff",
-          strokeWeight: 3,
-        },
+      clientMarkerRef.current = L.marker([lat, lng], {
+        icon: createSvgIcon("#3b82f6", "circle"),
         title: "Locația mea",
-        zIndex: 100,
-      });
+        zIndexOffset: 100,
+      }).addTo(mapRef.current);
     }
-    clientMarkerRef.current.setPosition({ lat, lng });
-    mapRef.current.panTo({ lat, lng });
+    clientMarkerRef.current.setLatLng([lat, lng]);
+    mapRef.current.panTo([lat, lng]);
   }, []);
 
   // Calculate distance between two coordinates (in meters)
@@ -221,21 +225,13 @@ export default function ClientApp() {
   const updateDriverMarker = useCallback((lat: number, lng: number) => {
     if (!mapRef.current) return;
     if (!driverMarkerRef.current) {
-      driverMarkerRef.current = new google.maps.Marker({
-        map: mapRef.current,
-        icon: {
-          path: google.maps.SymbolPath.FORWARD_CLOSED_ARROW,
-          scale: 7,
-          fillColor: "#f59e0b",
-          fillOpacity: 1,
-          strokeColor: "#fff",
-          strokeWeight: 2,
-        },
+      driverMarkerRef.current = L.marker([lat, lng], {
+        icon: createSvgIcon("#f59e0b", "arrow"),
         title: "Șoferul tău",
-        zIndex: 200,
-      });
+        zIndexOffset: 200,
+      }).addTo(mapRef.current);
     }
-    driverMarkerRef.current.setPosition({ lat, lng });
+    driverMarkerRef.current.setLatLng([lat, lng]);
   }, []);
 
   // Reset arrival notification when ride ends
@@ -250,12 +246,12 @@ export default function ClientApp() {
   // Calculate distance between two coordinates (in meters)
 
   const clearDirections = useCallback(() => {
-    if (directionsRendererRef.current) {
-      directionsRendererRef.current.setMap(null);
-      directionsRendererRef.current = null;
+    if (routePolylineRef.current) {
+      routePolylineRef.current.remove();
+      routePolylineRef.current = null;
     }
     if (driverMarkerRef.current) {
-      driverMarkerRef.current.setMap(null);
+      driverMarkerRef.current.remove();
       driverMarkerRef.current = null;
     }
     setEstimatedArrival(null);
@@ -288,7 +284,7 @@ export default function ClientApp() {
     }
   }, [activeRideQuery.data]);
 
-  // Socket.IO auth is now emitted in verifyOtpMut.onSuccess
+  // Socket.IO auth is emitted by the session effect after login/register
 
   // Countdown timer for ETA
   useEffect(() => {
@@ -366,57 +362,24 @@ export default function ClientApp() {
       setDriverPos({ lat: data.lat, lng: data.lng });
       updateDriverMarker(data.lat, data.lng);
       if (clientPos) {
-        // Initialize DirectionsRenderer if not already done
-        if (mapRef.current && !directionsRendererRef.current) {
-          console.log("Initializing DirectionsRenderer");
-          directionsRendererRef.current = new google.maps.DirectionsRenderer({
-            map: mapRef.current,
-            suppressMarkers: true,
-            polylineOptions: {
-              strokeColor: "#3b82f6",
-              strokeWeight: 5,
-              strokeOpacity: 0.8,
-            },
-          });
-        }
-        
-        // Draw route using DirectionsService
-        if (mapRef.current && directionsRendererRef.current) {
-          console.log("Drawing route from", data, "to", clientPos);
-          const directionsService = new google.maps.DirectionsService();
-          directionsService.route(
-            {
-              origin: { lat: data.lat, lng: data.lng },
-              destination: clientPos,
-              travelMode: google.maps.TravelMode.DRIVING,
-            },
-            (result, status) => {
-              console.log("Route result:", status, result);
-              if (status === "OK" && result && directionsRendererRef.current) {
-                directionsRendererRef.current.setDirections(result);
+        // Draw route using OSRM
+        if (mapRef.current) {
+          fetchOSRMRoute({ lat: data.lat, lng: data.lng }, clientPos).then((route) => {
+            if (route && mapRef.current) {
+              if (routePolylineRef.current) {
+                routePolylineRef.current.remove();
               }
-            }
-          );
-        }
-        
-        // Calculate ETA
-        const distanceService = new google.maps.DistanceMatrixService();
-        distanceService.getDistanceMatrix(
-          {
-            origins: [{ lat: data.lat, lng: data.lng }],
-            destinations: [clientPos],
-            travelMode: google.maps.TravelMode.DRIVING,
-          },
-          (result, status) => {
-            console.log("ETA result:", status, result);
-            if (status === "OK" && result?.rows[0]?.elements[0]?.duration) {
-              const minutes = Math.ceil(result.rows[0].elements[0].duration.value / 60);
-              console.log("Setting ETA:", minutes);
+              routePolylineRef.current = L.polyline(route.coordinates, {
+                color: "#3b82f6",
+                weight: 5,
+                opacity: 0.8,
+              }).addTo(mapRef.current!);
+              const minutes = Math.ceil(route.duration / 60);
               setEstimatedArrival(minutes);
               setCountdownETA(minutes);
             }
-          }
-        );
+          });
+        }
         
         // Check if driver is within 50 meters of client
         const distance = calculateDistance(data.lat, data.lng, clientPos.lat, clientPos.lng);
@@ -435,33 +398,42 @@ export default function ClientApp() {
   useEffect(() => {
     if (!session) return;
 
-    // Try real geolocation first
     if (navigator.geolocation) {
+      // Ask for a high-accuracy fix immediately; maximumAge: 0 so we never
+      // reuse a stale last-known-location. Each new fix refines accuracy.
       locationWatchRef.current = navigator.geolocation.watchPosition(
         (pos) => {
-          const { latitude: lat, longitude: lng } = pos.coords;
+          const { latitude: lat, longitude: lng, accuracy } = pos.coords;
+          const ageMs = Date.now() - pos.timestamp;
+          // Ignore stale last-known-location fixes (older than ~1.5 min).
+          if (ageMs > MAX_LOCATION_AGE_MS) {
+            console.warn("[GPS] Ignoring stale fix, age(ms):", ageMs);
+            return;
+          }
+          setGpsError(null);
+          setGpsAccuracy(accuracy);
+          // Move the map/marker so the user sees progress, even on a coarse fix.
           setClientPos({ lat, lng });
-          emit("location:client", { lat, lng });
           updateClientMarker(lat, lng);
+          // Only share precise fixes with the dispatcher (never a default pin).
+          if (accuracy <= GPS_ACCURACY_THRESHOLD_M) {
+            emit("location:client", { lat, lng });
+          }
+          console.log("[GPS] fix lat:", lat, "lng:", lng, "accuracy(m):", Math.round(accuracy));
         },
         (err) => {
           console.warn("GPS error:", err);
-          // Fallback: use default location (Bucharest center) for demo
-          const defaultLat = 44.4268;
-          const defaultLng = 26.1025;
-          setClientPos({ lat: defaultLat, lng: defaultLng });
-          emit("location:client", { lat: defaultLat, lng: defaultLng });
-          updateClientMarker(defaultLat, defaultLng);
+          // No silent Bucharest fallback: keep the order button blocked and tell the user.
+          setGpsError(
+            err.code === err.PERMISSION_DENIED
+              ? "Permite accesul la locație pentru a comanda."
+              : "Nu s-a putut determina locația. Verifică GPS-ul."
+          );
         },
-        { enableHighAccuracy: true, maximumAge: 5000, timeout: 10000 }
+        { enableHighAccuracy: true, maximumAge: 0, timeout: 20000 }
       );
     } else {
-      // Fallback if geolocation not available
-      const defaultLat = 44.4268;
-      const defaultLng = 26.1025;
-      setClientPos({ lat: defaultLat, lng: defaultLng });
-      emit("location:client", { lat: defaultLat, lng: defaultLng });
-      updateClientMarker(defaultLat, defaultLng);
+      setGpsError("Dispozitivul nu suportă geolocația.");
     }
 
     return () => {
@@ -471,36 +443,57 @@ export default function ClientApp() {
     };
   }, [session, emit]);
 
-  const handleMapReady = useCallback((map: google.maps.Map) => {
+  // Reverse geocode the precise fix into a real address (instead of a fake one).
+  useEffect(() => {
+    if (!gpsReady || !clientPos) return;
+    const prev = lastGeocodedRef.current;
+    // Only re-geocode when the position moved meaningfully (~25m).
+    if (
+      prev &&
+      Math.abs(prev.lat - clientPos.lat) < 0.0002 &&
+      Math.abs(prev.lng - clientPos.lng) < 0.0002
+    ) {
+      return;
+    }
+    lastGeocodedRef.current = { lat: clientPos.lat, lng: clientPos.lng };
+    let cancelled = false;
+    setAddressLoading(true);
+    reverseGeocode(clientPos.lat, clientPos.lng)
+      .then((addr) => {
+        if (!cancelled) setClientAddress(addr);
+      })
+      .finally(() => {
+        if (!cancelled) setAddressLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [gpsReady, clientPos]);
+
+  const handleMapReady = useCallback((map: L.Map) => {
     if (!map) {
       console.error("Map not initialized");
       return;
     }
     mapRef.current = map;
     setMapReady(true);
-    
-    // Center on client position if available
+
     if (clientPos) {
-      map.setCenter({ lat: clientPos.lat, lng: clientPos.lng });
-      map.setZoom(15);
+      map.setView([clientPos.lat, clientPos.lng], 15);
       updateClientMarker(clientPos.lat, clientPos.lng);
     } else {
-      // Try to center on user location - don't set fallback center yet
+      // Center the map on a best-effort fix purely for display; ordering still
+      // requires an accurate fix from the high-accuracy watch above.
       navigator.geolocation?.getCurrentPosition(
         (pos) => {
           const lat = pos.coords.latitude;
           const lng = pos.coords.longitude;
-          map.setCenter({ lat, lng });
-          map.setZoom(15);
-          setClientPos({ lat, lng });
-          updateClientMarker(lat, lng);
+          map.setView([lat, lng], 15);
         },
         (error) => {
           console.warn("Geolocation error:", error);
-          // Only set fallback after GPS fails
-          map.setCenter({ lat: 44.4268, lng: 26.1025 });
-          map.setZoom(13);
-        }
+        },
+        { enableHighAccuracy: true, maximumAge: 0, timeout: 20000 }
       );
     }
   }, [clientPos, updateClientMarker]);
@@ -508,6 +501,12 @@ export default function ClientApp() {
   const handleCallTaxi = () => {
     if (!session || !clientPos) {
       toast.error("Activați GPS-ul pentru a chema taxi");
+      return;
+    }
+    // Block ordering until we have a precise, fresh fix to avoid sending a
+    // default/stale location (e.g. Bucharest) to the dispatcher.
+    if (!gpsReady) {
+      toast.error("Se determină locația exactă... așteaptă câteva secunde.");
       return;
     }
     setRideStatus("requesting");
@@ -521,7 +520,7 @@ export default function ClientApp() {
       token: session.token,
       clientLat: clientPos.lat,
       clientLng: clientPos.lng,
-      clientAddress: "Locația curentă",
+      clientAddress: clientAddress || "Locația curentă",
     });
   };
 
@@ -540,6 +539,8 @@ export default function ClientApp() {
     const randomLat = baseLat + (Math.random() - 0.5) * 0.05;
     const randomLng = baseLng + (Math.random() - 0.5) * 0.05;
     setClientPos({ lat: randomLat, lng: randomLng });
+    setGpsAccuracy(10); // mark the simulated fix as precise so the button enables
+    setGpsError(null);
     emit("location:client", { lat: randomLat, lng: randomLng });
     updateClientMarker(randomLat, randomLng);
     toast.success("Locație simulată pentru test");
@@ -549,109 +550,145 @@ export default function ClientApp() {
 
   if (!session) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-gray-950 via-blue-950 to-gray-900 flex items-center justify-center p-4">
-        <Card className="w-full max-w-sm bg-gray-900 border-gray-700 shadow-2xl">
+      <div className="min-h-screen bg-gradient-to-br from-gray-100 via-blue-50 to-gray-100 dark:from-gray-950 dark:via-blue-950 dark:to-gray-900 flex items-center justify-center p-4">
+        <Card className="w-full max-w-sm bg-white dark:bg-gray-900 border-gray-300 dark:border-gray-700 shadow-2xl">
           <CardHeader className="text-center pb-2">
             <div className="text-5xl mb-2">🚖</div>
-            <CardTitle className="text-white text-2xl font-bold">Taxi App</CardTitle>
-            <p className="text-gray-400 text-sm">Autentificare cu număr de telefon</p>
+            <CardTitle className="text-gray-900 dark:text-white text-2xl font-bold">Taxi App</CardTitle>
+            <p className="text-gray-500 dark:text-gray-400 text-sm">
+              {authMode === "login"
+                ? "Autentificare cu telefon și parolă"
+                : "Creează un cont nou"}
+            </p>
           </CardHeader>
           <CardContent className="flex flex-col gap-4">
-            {!otpSent && !tempToken ? (
+            <div className="relative">
+              <Phone className="absolute left-3 top-3 w-4 h-4 text-gray-400" />
+              <Input
+                placeholder="+40 7XX XXX XXX"
+                value={phone}
+                onChange={(e) => setPhone(e.target.value)}
+                className="bg-gray-50 dark:bg-gray-800 border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white pl-10"
+                type="tel"
+                autoComplete="tel"
+              />
+            </div>
+
+            <div className="relative">
+              <Lock className="absolute left-3 top-3 w-4 h-4 text-gray-400" />
+              <Input
+                placeholder="Parolă"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="bg-gray-50 dark:bg-gray-800 border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white pl-10"
+                type="password"
+                autoComplete={authMode === "login" ? "current-password" : "new-password"}
+              />
+            </div>
+
+            {authMode === "register" && (
               <>
                 <div className="relative">
-                  <Phone className="absolute left-3 top-3 w-4 h-4 text-gray-400" />
+                  <Lock className="absolute left-3 top-3 w-4 h-4 text-gray-400" />
                   <Input
-                    placeholder="+40 7XX XXX XXX"
-                    value={phone}
-                    onChange={(e) => setPhone(e.target.value)}
-                    className="bg-gray-800 border-gray-600 text-white pl-10"
-                    type="tel"
+                    placeholder="Confirmă parola"
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    className="bg-gray-50 dark:bg-gray-800 border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white pl-10"
+                    type="password"
+                    autoComplete="new-password"
                   />
                 </div>
-                <Button
-                  className="w-full bg-yellow-500 hover:bg-yellow-600 text-black font-bold text-lg py-6"
-                  onClick={() => {
-                    if (phone.length < 10) {
-                      toast.error("Introdu un număr de telefon valid");
-                      return;
-                    }
-                    sendOtpMut.mutate({ phone });
-                  }}
-                  disabled={sendOtpMut.isPending || phone.length < 10}
-                >
-                  {sendOtpMut.isPending ? "Se trimite..." : "Trimite Cod OTP"}
-                </Button>
-              </>
-            ) : tempToken ? (
-              // Name input screen
-              <>
-                <p className="text-gray-400 text-sm text-center mb-4">
-                  Bun venit! Introdu-ți numele
-                </p>
                 <div className="relative">
                   <User className="absolute left-3 top-3 w-4 h-4 text-gray-400" />
                   <Input
-                    placeholder="Introdu-ți numele"
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    className="bg-gray-800 border-gray-600 text-white pl-10"
+                    placeholder="Nume"
+                    value={firstName}
+                    onChange={(e) => setFirstName(e.target.value)}
+                    className="bg-gray-50 dark:bg-gray-800 border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white pl-10"
                   />
                 </div>
-                <Button
-                  className="w-full bg-yellow-500 hover:bg-yellow-600 text-black font-bold text-lg py-6"
-                  onClick={() => {
-                    if (name.trim().length < 2) {
-                      toast.error("Introdu un nume valid");
-                      return;
-                    }
-                    if (tempToken) updateNameMut.mutate({ token: tempToken, name: name.trim() });
-                  }}
-                  disabled={updateNameMut.isPending || name.trim().length < 2}
-                >
-                  {updateNameMut.isPending ? "Se salvează..." : "Continuă"}
-                </Button>
-              </>
-            ) : (
-              <>
-                <p className="text-gray-400 text-sm text-center">
-                  Introdu codul trimis la <span className="text-white font-semibold">{phone}</span>
-                </p>
-                {devOtp && (
-                  <div className="bg-blue-900 border-2 border-blue-500 rounded-lg p-4 text-center">
-                    <p className="text-blue-300 text-sm mb-2 font-semibold">Cod demo (nu trimite SMS real):</p>
-                    <p className="text-white font-mono text-4xl font-bold tracking-widest bg-blue-950 rounded p-3">{devOtp}</p>
-                  </div>
-                )}
-                <Input
-                  placeholder="Cod OTP (6 cifre)"
-                  value={otp}
-                  onChange={(e) => setOtp(e.target.value)}
-                  className="bg-gray-800 border-gray-600 text-white text-center text-xl tracking-widest"
-                  maxLength={6}
-                />
-                <Button
-                  className="w-full bg-yellow-500 hover:bg-yellow-600 text-black font-bold text-lg py-6"
-                  onClick={() => {
-                    if (otp.length !== 6) {
-                      toast.error("Codul trebuie să aibă 6 cifre");
-                      return;
-                    }
-                    verifyOtpMut.mutate({ phone, code: otp });
-                  }}
-                  disabled={verifyOtpMut.isPending || otp.length !== 6}
-                >
-                  {verifyOtpMut.isPending ? "Se verifică..." : "Verifică Codul"}
-                </Button>
-                <Button
-                  variant="ghost"
-                  className="text-gray-400 hover:text-white"
-                  onClick={() => { setOtpSent(false); setOtp(""); setDevOtp(null); }}
-                >
-                  Schimbă numărul
-                </Button>
+                <div className="relative">
+                  <User className="absolute left-3 top-3 w-4 h-4 text-gray-400" />
+                  <Input
+                    placeholder="Prenume"
+                    value={lastName}
+                    onChange={(e) => setLastName(e.target.value)}
+                    className="bg-gray-50 dark:bg-gray-800 border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white pl-10"
+                  />
+                </div>
               </>
             )}
+
+            {authMode === "login" ? (
+              <Button
+                className="w-full bg-yellow-500 hover:bg-yellow-600 text-black font-bold text-lg py-6"
+                onClick={() => {
+                  if (phone.trim().length < 10) {
+                    toast.error("Introdu un număr de telefon valid");
+                    return;
+                  }
+                  if (password.length < 6) {
+                    toast.error("Parola trebuie să aibă minim 6 caractere");
+                    return;
+                  }
+                  loginMut.mutate({ phone: phone.trim(), password });
+                }}
+                disabled={loginMut.isPending}
+              >
+                {loginMut.isPending ? "Se verifică..." : "Intră în cont"}
+              </Button>
+            ) : (
+              <Button
+                className="w-full bg-yellow-500 hover:bg-yellow-600 text-black font-bold text-lg py-6"
+                onClick={() => {
+                  if (phone.trim().length < 10) {
+                    toast.error("Introdu un număr de telefon valid");
+                    return;
+                  }
+                  if (password.length < 6) {
+                    toast.error("Parola trebuie să aibă minim 6 caractere");
+                    return;
+                  }
+                  if (password !== confirmPassword) {
+                    toast.error("Parolele nu coincid");
+                    return;
+                  }
+                  if (firstName.trim().length < 2) {
+                    toast.error("Introdu numele");
+                    return;
+                  }
+                  if (lastName.trim().length < 2) {
+                    toast.error("Introdu prenumele");
+                    return;
+                  }
+                  registerMut.mutate({
+                    phone: phone.trim(),
+                    password,
+                    name: `${firstName.trim()} ${lastName.trim()}`,
+                  });
+                }}
+                disabled={registerMut.isPending}
+              >
+                {registerMut.isPending ? "Se creează..." : "Creează Cont"}
+              </Button>
+            )}
+
+            <Button
+              variant="ghost"
+              className="text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white text-sm"
+              onClick={() => {
+                setAuthMode(authMode === "login" ? "register" : "login");
+                setPassword("");
+                setConfirmPassword("");
+                setFirstName("");
+                setLastName("");
+              }}
+            >
+              {authMode === "login"
+                ? "Nu ai cont? Creează Cont"
+                : "Ai deja cont? Autentifică-te"}
+            </Button>
           </CardContent>
         </Card>
       </div>
@@ -663,45 +700,46 @@ export default function ClientApp() {
   const isRideActive = ["pending", "assigned", "accepted", "in_progress"].includes(rideStatus);
 
   return (
-    <div className="h-screen bg-gray-950 flex flex-col">
+    <div className="h-screen bg-gray-100 dark:bg-gray-950 flex flex-col overflow-x-hidden">
       {/* Header */}
-      <header className="bg-gray-900 border-b border-gray-800 px-4 py-3 flex items-center justify-between flex-shrink-0">
-        <div className="flex items-center gap-2">
+      <header className="bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800 px-3 md:px-4 py-3 flex items-center justify-between gap-2 flex-shrink-0">
+        <div className="flex items-center gap-2 min-w-0">
           <span className="text-xl">🚖</span>
-          <span className="text-yellow-400 font-bold">Taxi App</span>
+          <span className="text-yellow-600 dark:text-yellow-400 font-bold">Taxi App</span>
         </div>
-        <div className="flex items-center gap-3">
-          <span className="text-gray-400 text-sm">{session.phone}</span>
-          <Button variant="ghost" size="sm" onClick={handleLogout} className="text-gray-400 hover:text-white text-xs">
+        <div className="flex items-center gap-1.5 md:gap-3 flex-shrink-0">
+          <span className="text-gray-500 dark:text-gray-400 text-sm truncate max-w-[40vw]">{session.phone}</span>
+          <ThemeToggle />
+          <Button variant="ghost" size="sm" onClick={handleLogout} className="text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white text-xs">
             Ieșire
           </Button>
         </div>
       </header>
 
       {/* Map */}
-      <div className="flex-1 relative w-full overflow-hidden">
+      <div className="flex-1 relative w-full overflow-hidden" style={{ isolation: "isolate" }}>
         {!mapReady && (
-          <div className="absolute inset-0 bg-gray-900 flex items-center justify-center z-10">
-            <span className="text-gray-400">Se încarcă hartă...</span>
+          <div className="absolute inset-0 bg-gray-100 dark:bg-gray-900 flex items-center justify-center z-10">
+            <span className="text-gray-500 dark:text-gray-400">Se încarcă hartă...</span>
           </div>
         )}
         <MapView onMapReady={handleMapReady} className="w-full h-full" />
 
         {/* Status overlay */}
         {rideStatus === "pending" && (
-          <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-gray-900 bg-opacity-95 rounded-xl px-4 py-2 flex items-center gap-2 shadow-lg">
+          <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-gray-900 bg-opacity-95 rounded-xl px-4 py-2 flex items-center gap-2 shadow-lg z-[1000]">
             <div className="w-2 h-2 bg-yellow-400 rounded-full animate-pulse"></div>
             <span className="text-white text-sm font-medium">Se caută șofer...</span>
           </div>
         )}
         {(rideStatus === "assigned") && (
-          <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-blue-900 bg-opacity-95 rounded-xl px-4 py-2 flex items-center gap-2 shadow-lg">
+          <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-blue-900 bg-opacity-95 rounded-xl px-4 py-2 flex items-center gap-2 shadow-lg z-[1000]">
             <Car className="w-4 h-4 text-blue-300" />
             <span className="text-white text-sm font-medium">Șofer asignat, în așteptare acceptare...</span>
           </div>
         )}
         {rideStatus === "accepted" && countdownETA !== null && (
-          <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-green-900 bg-opacity-95 rounded-xl px-4 py-3 flex items-center gap-2 shadow-lg">
+          <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-green-900 bg-opacity-95 rounded-xl px-4 py-3 flex items-center gap-2 shadow-lg z-[1000]">
             <Clock className="w-4 h-4 text-green-300" />
             <span className="text-white text-sm font-medium">
               Soferul vine in {countdownETA > 0 ? `~${countdownETA} min` : "Sosind..."}
@@ -709,7 +747,7 @@ export default function ClientApp() {
           </div>
         )}
         {rideStatus === "completed" && (
-          <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-green-800 bg-opacity-95 rounded-xl px-4 py-2 flex items-center gap-2 shadow-lg">
+          <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-green-800 bg-opacity-95 rounded-xl px-4 py-2 flex items-center gap-2 shadow-lg z-[1000]">
             <CheckCircle className="w-4 h-4 text-green-300" />
             <span className="text-white text-sm font-medium">Cursă finalizată! Mulțumim!</span>
           </div>
@@ -717,7 +755,7 @@ export default function ClientApp() {
       </div>
 
       {/* Bottom Panel */}
-      <div className="bg-gray-900 border-t border-gray-800 p-4">
+      <div className="bg-white dark:bg-gray-900 border-t border-gray-200 dark:border-gray-800 p-4 max-h-[55vh] overflow-y-auto md:max-h-none [&>*]:mx-auto [&>*]:w-full [&>*]:max-w-2xl">
         {rideStatus === "idle" || rideStatus === "rejected" || rideStatus === "cancelled" ? (
           <div className="flex flex-col gap-3">
             {(rideStatus === "rejected" || rideStatus === "cancelled") && (
@@ -727,19 +765,45 @@ export default function ClientApp() {
                 </p>
               </div>
             )}
+            {/* Live address / GPS status */}
+            <div className="flex items-start gap-2 text-sm">
+              <MapPin className={`w-4 h-4 mt-0.5 shrink-0 ${gpsReady ? "text-green-500" : "text-yellow-500"}`} />
+              <div className="min-w-0">
+                {gpsReady ? (
+                  <p className="text-gray-900 dark:text-white truncate">
+                    {addressLoading || !clientAddress ? "Se caută locația ta..." : clientAddress}
+                  </p>
+                ) : gpsError ? (
+                  <p className="text-red-500">{gpsError}</p>
+                ) : (
+                  <p className="text-gray-500 dark:text-gray-400">Se caută locația ta...</p>
+                )}
+                {gpsAccuracy !== null && (
+                  <p className="text-gray-400 text-xs">Precizie GPS: ±{Math.round(gpsAccuracy)} m</p>
+                )}
+              </div>
+            </div>
             <Button
-              className="w-full bg-yellow-500 hover:bg-yellow-600 text-black font-bold text-xl py-8 rounded-2xl shadow-lg"
+              className="w-full bg-yellow-500 hover:bg-yellow-600 text-black font-bold text-xl py-8 rounded-2xl shadow-lg disabled:opacity-60 disabled:cursor-not-allowed"
               onClick={handleCallTaxi}
-              disabled={requestRideMut.isPending || !clientPos}
+              disabled={requestRideMut.isPending || !gpsReady}
             >
-              <Car className="w-6 h-6 mr-3" />
-              {requestRideMut.isPending ? "Se trimite..." : "Cheamă Taxi"}
+              {!gpsReady ? (
+                <>
+                  <div className="w-5 h-5 mr-3 border-2 border-black/40 border-t-transparent rounded-full animate-spin"></div>
+                  Se determină locația exactă...
+                </>
+              ) : (
+                <>
+                  <Car className="w-6 h-6 mr-3" />
+                  {requestRideMut.isPending ? "Se trimite..." : "Cheamă Taxi"}
+                </>
+              )}
             </Button>
-            {!clientPos && (
+            {!gpsReady && (
               <div className="flex flex-col gap-2">
                 <p className="text-gray-500 text-xs text-center">
-                  <MapPin className="w-3 h-3 inline mr-1" />
-                  Activați GPS-ul pentru a chema taxi
+                  Așteaptă fixarea GPS-ului (sub {GPS_ACCURACY_THRESHOLD_M} m) pentru a comanda corect.
                 </p>
                 <Button
                   variant="outline"
@@ -756,8 +820,8 @@ export default function ClientApp() {
           <div className="flex flex-col gap-3">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-white font-semibold">Cerere trimisă</p>
-                <p className="text-gray-400 text-sm">Dispatcherul caută un șofer disponibil...</p>
+                <p className="text-gray-900 dark:text-white font-semibold">Cerere trimisă</p>
+                <p className="text-gray-500 dark:text-gray-400 text-sm">Dispatcherul caută un șofer disponibil...</p>
               </div>
               <div className="w-8 h-8 border-2 border-yellow-400 border-t-transparent rounded-full animate-spin"></div>
             </div>
@@ -776,8 +840,8 @@ export default function ClientApp() {
                 {driverInfo?.name?.[0] || "S"}
               </div>
               <div>
-                <p className="text-white font-semibold">{driverInfo?.name || "Șofer asignat"}</p>
-                <p className="text-gray-400 text-sm">Așteptăm confirmarea șoferului...</p>
+                <p className="text-gray-900 dark:text-white font-semibold">{driverInfo?.name || "Șofer asignat"}</p>
+                <p className="text-gray-500 dark:text-gray-400 text-sm">Așteptăm confirmarea șoferului...</p>
               </div>
             </div>
             <Button
@@ -794,8 +858,8 @@ export default function ClientApp() {
               {driverInfo?.name?.[0] || "S"}
             </div>
             <div className="flex-1">
-              <p className="text-white font-semibold">{driverInfo?.name || "Soferul tau"}</p>
-              {driverInfo?.phone && <p className="text-gray-400 text-sm">{driverInfo.phone}</p>}
+              <p className="text-gray-900 dark:text-white font-semibold">{driverInfo?.name || "Soferul tau"}</p>
+              {driverInfo?.phone && <p className="text-gray-500 dark:text-gray-400 text-sm">{driverInfo.phone}</p>}
               {countdownETA !== null && (
                 <div className="flex items-center gap-1 mt-1">
                   <Clock className="w-3 h-3 text-green-400" />
@@ -815,8 +879,8 @@ export default function ClientApp() {
       
       {/* Driver Arrival Alert Modal */}
       {showArrivalAlert && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <Card className="bg-gradient-to-br from-green-900 to-green-800 border-green-600 w-96 shadow-2xl">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <Card className="bg-gradient-to-br from-green-900 to-green-800 border-green-600 w-full max-w-sm max-h-[90vh] overflow-y-auto shadow-2xl">
             <CardHeader className="text-center">
               <CardTitle className="text-white text-2xl flex items-center justify-center gap-2">
                 <CheckCircle className="w-8 h-8 text-green-400" />

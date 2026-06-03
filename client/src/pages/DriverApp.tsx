@@ -1,13 +1,18 @@
 import { useEffect, useRef, useState, useCallback } from "react";
+import L from "leaflet";
 import { trpc } from "@/lib/trpc";
-import { MapView } from "@/components/Map";
+import { MapView, createSvgIcon, fetchOSRMRoute } from "@/components/Map";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import { io } from "socket.io-client";
-import { User, Lock, MapPin, Car, CheckCircle, XCircle, Navigation, Phone, Clock, Star } from "lucide-react";
+import { User, Lock, MapPin, Car, CheckCircle, XCircle, Navigation, Phone, Clock, Star, Mic } from "lucide-react";
+import { ThemeToggle } from "@/components/ThemeToggle";
+import { playRideAssignedSound } from "@/lib/alerts";
+import { useWakeLock } from "@/hooks/useWakeLock";
+import { Room, RoomEvent, Track, RemoteTrackPublication, RemoteParticipant, TrackPublication, Participant } from "livekit-client";
 
 type DriverSession = { token: string; driverId: number; name: string; username: string };
 
@@ -71,6 +76,8 @@ type RideWithClient = {
 };
 
 export default function DriverApp() {
+  // Keep the screen awake while the driver app is open in the foreground.
+  useWakeLock(true);
   // Auth
   const [session, setSession] = useState<DriverSession | null>(() => loadSession());
   const [username, setUsername] = useState("");
@@ -87,18 +94,26 @@ export default function DriverApp() {
   const [showPanicConfirm, setShowPanicConfirm] = useState(false);
   const [panicAlertId, setPanicAlertId] = useState<number | null>(null);
   const [driverAvailable, setDriverAvailable] = useState(true); // true = Disponibil, false = Indisponibil
+  const [rideAlertFlash, setRideAlertFlash] = useState(false);
 
   // Map
   const [mapReady, setMapReady] = useState(false);
-  const mapRef = useRef<google.maps.Map | null>(null);
-  const driverMarkerRef = useRef<google.maps.Marker | null>(null);
-  const clientMarkerRef = useRef<google.maps.Marker | null>(null);
-  const directionsRendererRef = useRef<google.maps.DirectionsRenderer | null>(null);
+  const mapRef = useRef<L.Map | null>(null);
+  const driverMarkerRef = useRef<L.Marker | null>(null);
+  const clientMarkerRef = useRef<L.Marker | null>(null);
+  const routePolylineRef = useRef<L.Polyline | null>(null);
   const locationWatchRef = useRef<number | null>(null);
   const socketRef = useRef<any>(null);
   const [driverPos, setDriverPos] = useState<{ lat: number; lng: number } | null>(null);
+  const driverPosRef = useRef<{ lat: number; lng: number } | null>(null);
   const [estimatedArrival, setEstimatedArrival] = useState<number | null>(null);
   const [rideStartLocation, setRideStartLocation] = useState<{ lat: number; lng: number } | null>(null);
+
+  // PTT (Push-to-Talk) state - LiveKit
+  const [pttActive, setPttActive] = useState(false);
+  const [pttIncoming, setPttIncoming] = useState(false);
+  const livekitRoomRef = useRef<Room | null>(null);
+  const livekitConnectedRef = useRef(false);
 
   // tRPC
   const loginMut = trpc.driver.login.useMutation({
@@ -143,12 +158,13 @@ export default function DriverApp() {
   const rejectRideMut = trpc.driver.rejectRide.useMutation({
     onSuccess: () => {
       toast.info("Cursă refuzată.");
-      // Unsubscribe from client location if was tracking
       if (pendingRide && socketRef.current) {
         socketRef.current.emit("untrack:client", { clientId: pendingRide.clientId });
       }
       setPendingRide(null);
       setRideAccepted(false);
+      clearDirections();
+      setEstimatedArrival(null);
     },
     onError: (e) => toast.error(e.message),
   });
@@ -270,17 +286,35 @@ export default function DriverApp() {
       s.emit("auth:driver", { token: session.token });
     });
 
-    s.on("ride:assigned", (data: AssignedRide) => {
-      setPendingRide(data);
+    s.on("ride:assigned", (data: any) => {
+      const ride: AssignedRide = {
+        rideId: data.rideId,
+        clientId: data.clientId,
+        clientPhone: data.clientPhone,
+        clientName: data.clientName,
+        lat: parseFloat(String(data.clientLat || data.lat)),
+        lng: parseFloat(String(data.clientLng || data.lng)),
+        address: data.clientAddress || data.address,
+      };
+      setPendingRide(ride);
       setRideAccepted(false);
-      setAcceptanceCountdown(30); // Start 30-second countdown
-      toast.info(`🚖 Cursă nouă asignată de la ${data.clientPhone || "client"}!`, { duration: 10000 });
+      setAcceptanceCountdown(30);
+      playRideAssignedSound();
+      setRideAlertFlash(true);
+      setTimeout(() => setRideAlertFlash(false), 3000);
+      toast.info(`🚖 Cursă nouă asignată de la ${ride.clientPhone || "client"}!`, { duration: 10000 });
+      // Show client location and route on map immediately (before accept)
+      if (ride.lat && ride.lng) {
+        showPendingRideOnMap(ride);
+      }
     });
 
     s.on("ride:timeout", (data: { rideId: number }) => {
       if (pendingRide?.rideId === data.rideId) {
         setPendingRide(null);
         setAcceptanceCountdown(null);
+        clearDirections();
+        setEstimatedArrival(null);
         toast.error("⏱️ Timp expirat! Cursa a fost reasignată altui șofer.");
       }
     });
@@ -290,20 +324,19 @@ export default function DriverApp() {
       setActiveRide(null);
       setRideAccepted(false);
       clearDirections();
+      setEstimatedArrival(null);
       toast.info("Cursa a fost anulată de client/dispatcher");
     });
 
     s.on("client:location:update", (data: { clientId: number; lat: number; lng: number }) => {
       // Update client location on map when tracking
       if (rideAccepted && activeRide && activeRide.clientId === data.clientId) {
-        if (mapRef.current && clientMarkerRef.current) {
-          clientMarkerRef.current.setPosition({ lat: data.lat, lng: data.lng });
-          // Update route
-          if (driverPos) {
-            drawRouteToClient(driverPos, { lat: data.lat, lng: data.lng });
-            calculateETA(driverPos, { lat: data.lat, lng: data.lng });
+          if (mapRef.current && clientMarkerRef.current) {
+            clientMarkerRef.current.setLatLng([data.lat, data.lng]);
+            if (driverPos) {
+              drawRouteToClient(driverPos, { lat: data.lat, lng: data.lng });
+            }
           }
-        }
       }
     });
 
@@ -322,6 +355,7 @@ export default function DriverApp() {
       (pos) => {
         const { latitude: lat, longitude: lng } = pos.coords;
         setDriverPos({ lat, lng });
+        driverPosRef.current = { lat, lng };
         socketRef.current?.emit("location:driver", { lat, lng, token: session.token });
         updateDriverMarker(lat, lng);
         // Update route if navigating to client
@@ -363,112 +397,225 @@ export default function DriverApp() {
   const updateDriverMarker = useCallback((lat: number, lng: number) => {
     if (!mapRef.current) return;
     if (!driverMarkerRef.current) {
-      driverMarkerRef.current = new google.maps.Marker({
-        map: mapRef.current,
-        icon: {
-          path: google.maps.SymbolPath.FORWARD_CLOSED_ARROW,
-          scale: 8,
-          fillColor: "#f59e0b",
-          fillOpacity: 1,
-          strokeColor: "#fff",
-          strokeWeight: 2,
-        },
+      driverMarkerRef.current = L.marker([lat, lng], {
+        icon: createSvgIcon("#f59e0b", "arrow"),
         title: "Locația mea",
-        zIndex: 200,
-      });
+        zIndexOffset: 200,
+      }).addTo(mapRef.current);
     }
-    driverMarkerRef.current.setPosition({ lat, lng });
-    mapRef.current.panTo({ lat, lng });
+    driverMarkerRef.current.setLatLng([lat, lng]);
+    mapRef.current.panTo([lat, lng]);
   }, []);
 
-  const drawRouteToClient = useCallback((from: { lat: number; lng: number }, to: { lat: number; lng: number }) => {
+  const drawRouteToClient = useCallback(async (from: { lat: number; lng: number }, to: { lat: number; lng: number }) => {
     if (!mapRef.current) return;
-    if (!directionsRendererRef.current) {
-      directionsRendererRef.current = new google.maps.DirectionsRenderer({
-        map: mapRef.current,
-        suppressMarkers: true,
-        polylineOptions: {
-          strokeColor: "#3b82f6",
-          strokeWeight: 6,
-          strokeOpacity: 0.9,
-        },
-      });
-    }
     // Client marker
     if (!clientMarkerRef.current) {
-      clientMarkerRef.current = new google.maps.Marker({
-        map: mapRef.current,
-        icon: {
-          path: google.maps.SymbolPath.CIRCLE,
-          scale: 10,
-          fillColor: "#ef4444",
-          fillOpacity: 1,
-          strokeColor: "#fff",
-          strokeWeight: 3,
-        },
+      clientMarkerRef.current = L.marker([to.lat, to.lng], {
+        icon: createSvgIcon("#ef4444", "circle"),
         title: "Locația clientului",
-        zIndex: 100,
-      });
+        zIndexOffset: 100,
+      }).addTo(mapRef.current);
     }
-    clientMarkerRef.current.setPosition(to);
+    clientMarkerRef.current.setLatLng([to.lat, to.lng]);
 
-    const service = new google.maps.DirectionsService();
-    service.route(
-      { origin: from, destination: to, travelMode: google.maps.TravelMode.DRIVING },
-      (result, status) => {
-        if (status === "OK" && result) {
-          directionsRendererRef.current!.setDirections(result);
-          // Fit bounds
-          const bounds = new google.maps.LatLngBounds();
-          bounds.extend(from);
-          bounds.extend(to);
-          mapRef.current?.fitBounds(bounds, 80);
-        }
+    const route = await fetchOSRMRoute(from, to);
+    if (route && mapRef.current) {
+      if (routePolylineRef.current) {
+        routePolylineRef.current.remove();
       }
-    );
+      routePolylineRef.current = L.polyline(route.coordinates, {
+        color: "#3b82f6",
+        weight: 6,
+        opacity: 0.9,
+      }).addTo(mapRef.current);
+      // Update ETA from route
+      const minutes = Math.ceil(route.duration / 60);
+      setEstimatedArrival(minutes);
+      // Fit bounds
+      const bounds = L.latLngBounds([from.lat, from.lng], [to.lat, to.lng]);
+      mapRef.current.fitBounds(bounds, { padding: [80, 80] });
+    }
   }, []);
 
-  const calculateETA = useCallback((from: { lat: number; lng: number }, to: { lat: number; lng: number }) => {
-    const service = new google.maps.DistanceMatrixService();
-    service.getDistanceMatrix(
-      { origins: [from], destinations: [to], travelMode: google.maps.TravelMode.DRIVING },
-      (result, status) => {
-        if (status === "OK" && result?.rows[0]?.elements[0]?.duration) {
-          const minutes = Math.ceil(result.rows[0].elements[0].duration.value / 60);
-          setEstimatedArrival(minutes);
-        }
-      }
-    );
+  const calculateETA = useCallback(async (from: { lat: number; lng: number }, to: { lat: number; lng: number }) => {
+    const route = await fetchOSRMRoute(from, to);
+    if (route) {
+      const minutes = Math.ceil(route.duration / 60);
+      setEstimatedArrival(minutes);
+    }
   }, []);
 
   const clearDirections = useCallback(() => {
-    if (directionsRendererRef.current) {
-      directionsRendererRef.current.setMap(null);
-      directionsRendererRef.current = null;
+    if (routePolylineRef.current) {
+      routePolylineRef.current.remove();
+      routePolylineRef.current = null;
     }
     if (clientMarkerRef.current) {
-      clientMarkerRef.current.setMap(null);
+      clientMarkerRef.current.remove();
       clientMarkerRef.current = null;
     }
     setEstimatedArrival(null);
   }, []);
 
-  const handleMapReady = useCallback((map: google.maps.Map) => {
+  const showPendingRideOnMap = useCallback((ride: AssignedRide) => {
+    if (!mapRef.current) return;
+    // Place client marker on map
+    if (!clientMarkerRef.current) {
+      clientMarkerRef.current = L.marker([ride.lat, ride.lng], {
+        icon: createSvgIcon("#ef4444", "circle"),
+        title: "Locația clientului",
+        zIndexOffset: 100,
+      }).addTo(mapRef.current);
+    }
+    clientMarkerRef.current.setLatLng([ride.lat, ride.lng]);
+    // Draw route from driver to client if we have driver position
+    const pos = driverPosRef.current;
+    if (pos) {
+      drawRouteToClient(pos, { lat: ride.lat, lng: ride.lng });
+    } else {
+      // At least pan to client
+      mapRef.current.setView([ride.lat, ride.lng], 14);
+    }
+  }, [drawRouteToClient]);
+
+  // LiveKit PTT: connect to room on mount, stay connected to receive audio
+  useEffect(() => {
+    if (!session) return;
+    const room = new Room();
+    livekitRoomRef.current = room;
+
+    // Handle incoming audio from dispatcher
+    const handleTrackSubscribed = (
+      track: RemoteTrackPublication["track"],
+      publication: RemoteTrackPublication,
+      participant: RemoteParticipant
+    ) => {
+      if (track && track.kind === Track.Kind.Audio) {
+        const el = track.attach() as HTMLAudioElement;
+        el.id = `lk-audio-${participant.identity}`;
+        el.autoplay = true;
+        el.muted = false;
+        el.volume = 1.0;
+        document.body.appendChild(el);
+        void el.play().catch(() => {});
+        if (participant.identity === "dispatcher") {
+          setPttIncoming(!publication.isMuted);
+        }
+      }
+    };
+
+    const handleTrackUnsubscribed = (
+      track: RemoteTrackPublication["track"],
+      _publication: RemoteTrackPublication,
+      participant: RemoteParticipant
+    ) => {
+      if (track && track.kind === Track.Kind.Audio) {
+        track.detach().forEach((el) => el.remove());
+        if (participant.identity === "dispatcher") {
+          setPttIncoming(false);
+        }
+      }
+    };
+
+    // setMicrophoneEnabled(false) mutes the track without unpublishing, so the
+    // receiver only gets mute/unmute events while talking starts/stops.
+    const handleTrackMuted = (publication: TrackPublication, participant: Participant) => {
+      if (participant.identity === "dispatcher" && publication.kind === Track.Kind.Audio) {
+        setPttIncoming(false);
+      }
+    };
+    const handleTrackUnmuted = (publication: TrackPublication, participant: Participant) => {
+      if (participant.identity === "dispatcher" && publication.kind === Track.Kind.Audio) {
+        setPttIncoming(true);
+      }
+    };
+
+    room.on(RoomEvent.TrackSubscribed, handleTrackSubscribed);
+    room.on(RoomEvent.TrackUnsubscribed, handleTrackUnsubscribed);
+    room.on(RoomEvent.TrackMuted, handleTrackMuted);
+    room.on(RoomEvent.TrackUnmuted, handleTrackUnmuted);
+
+    // Unlock audio playback if the browser blocks autoplay (no recent gesture)
+    const ensureAudioPlayback = () => {
+      void room.startAudio().catch(() => {});
+    };
+    room.on(RoomEvent.AudioPlaybackStatusChanged, () => {
+      if (!room.canPlaybackAudio) {
+        document.addEventListener("pointerdown", ensureAudioPlayback, { once: true });
+        document.addEventListener("touchstart", ensureAudioPlayback, { once: true });
+      }
+    });
+
+    // Connect to LiveKit room
+    (async () => {
+      try {
+        const resp = await fetch("/api/livekit/token", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            identity: `driver-${session.name}`,
+            room: "ptt-room",
+            // driverId is baked into the token so the dispatcher can identify
+            // the caller without a runtime setMetadata (which the grant rejects)
+            metadata: `driverId:${session.driverId}`,
+          }),
+        });
+        const { token } = await resp.json();
+        const wsUrl = `wss://${window.location.host}/livekit`;
+        await room.connect(wsUrl, token, {
+          autoSubscribe: true,
+        });
+        livekitConnectedRef.current = true;
+        console.log(`[LiveKit] Driver ${session.name} connected to ptt-room`);
+      } catch (err) {
+        console.error("[LiveKit] Connection error:", err);
+      }
+    })();
+
+    return () => {
+      room.disconnect();
+      livekitConnectedRef.current = false;
+      livekitRoomRef.current = null;
+    };
+  }, [session]);
+
+  // PTT start/stop handlers (LiveKit)
+  const pttStart = useCallback(async () => {
+    const room = livekitRoomRef.current;
+    if (!room || !livekitConnectedRef.current) {
+      toast.error("Radio nu este conectat");
+      return;
+    }
+    try {
+      await room.localParticipant.setMicrophoneEnabled(true);
+      setPttActive(true);
+    } catch (err) {
+      toast.error("Nu s-a putut accesa microfonul");
+    }
+  }, []);
+
+  const pttStop = useCallback(async () => {
+    const room = livekitRoomRef.current;
+    if (room) {
+      await room.localParticipant.setMicrophoneEnabled(false);
+    }
+    setPttActive(false);
+  }, []);
+
+  const handleMapReady = useCallback((map: L.Map) => {
     mapRef.current = map;
     setMapReady(true);
     navigator.geolocation?.getCurrentPosition(
       (pos) => {
         const lat = pos.coords.latitude;
         const lng = pos.coords.longitude;
-        map.setCenter({ lat, lng });
-        map.setZoom(15);
+        map.setView([lat, lng], 15);
         setDriverPos({ lat, lng });
       },
       (error) => {
         console.warn("Geolocation error:", error);
-        // Only set fallback after GPS fails
-        map.setCenter({ lat: 44.4268, lng: 26.1025 });
-        map.setZoom(13);
+        map.setView([44.4268, 26.1025], 13);
       }
     );
   }, []);
@@ -490,12 +637,12 @@ export default function DriverApp() {
 
   if (!session) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-gray-950 via-yellow-950 to-gray-900 flex items-center justify-center p-4">
-        <Card className="w-full max-w-sm bg-gray-900 border-gray-700 shadow-2xl">
+      <div className="min-h-screen bg-gradient-to-br from-gray-100 via-yellow-50 to-gray-100 dark:from-gray-950 dark:via-yellow-950 dark:to-gray-900 flex items-center justify-center p-4">
+        <Card className="w-full max-w-sm bg-white dark:bg-gray-900 border-gray-300 dark:border-gray-700 shadow-2xl">
           <CardHeader className="text-center pb-2">
             <div className="text-5xl mb-2">🚗</div>
-            <CardTitle className="text-white text-2xl font-bold">Portal Șofer</CardTitle>
-            <p className="text-gray-400 text-sm">Autentificare cu datele create de dispatcher</p>
+            <CardTitle className="text-gray-900 dark:text-white text-2xl font-bold">Portal Șofer</CardTitle>
+            <p className="text-gray-500 dark:text-gray-400 text-sm">Autentificare cu datele create de dispatcher</p>
           </CardHeader>
           <CardContent className="flex flex-col gap-4">
             <div className="relative">
@@ -504,7 +651,7 @@ export default function DriverApp() {
                 placeholder="Username"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
-                className="bg-gray-800 border-gray-600 text-white pl-10"
+                className="bg-gray-50 dark:bg-gray-800 border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white pl-10"
                 autoComplete="username"
               />
             </div>
@@ -515,7 +662,7 @@ export default function DriverApp() {
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="bg-gray-800 border-gray-600 text-white pl-10"
+                className="bg-gray-50 dark:bg-gray-800 border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white pl-10"
                 autoComplete="current-password"
                 onKeyDown={(e) => e.key === "Enter" && loginMut.mutate({ username, password })}
               />
@@ -536,14 +683,32 @@ export default function DriverApp() {
   // ─── Main Driver App ──────────────────────────────────────────────────────
 
   return (
-    <div className="h-screen bg-gray-950 flex flex-col">
+    <div className="h-screen bg-gray-100 dark:bg-gray-950 flex flex-col overflow-x-hidden">
       {/* Header */}
-      <header className="bg-gray-900 border-b border-gray-800 px-4 py-3 flex items-center justify-between">
-        <div className="flex items-center gap-2">
+      <header className="bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800 px-3 md:px-4 py-3 flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2 min-w-0">
           <span className="text-xl">🚗</span>
-          <span className="text-yellow-400 font-bold">{session.name}</span>
+          <span className="text-yellow-600 dark:text-yellow-400 font-bold truncate">{session.name}</span>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-1.5 md:gap-3 flex-shrink-0">
+          {/* PTT Button */}
+          <button
+            onMouseDown={pttStart}
+            onMouseUp={pttStop}
+            onMouseLeave={() => { if (pttActive) pttStop(); }}
+            onTouchStart={(e) => { e.preventDefault(); pttStart(); }}
+            onTouchEnd={(e) => { e.preventDefault(); pttStop(); }}
+            className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-all border ${
+              pttActive
+                ? "bg-red-600 border-red-500 text-white shadow-lg shadow-red-900/30 animate-pulse"
+                : "bg-gray-200 dark:bg-gray-800 border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-700"
+            }`}
+            title="Apasă și ține apăsat pentru a vorbi cu dispecerul"
+          >
+            <Mic className="w-3.5 h-3.5" />
+            <span className="hidden md:inline">{pttActive ? "Transmit..." : "Radio"}</span>
+          </button>
+          <ThemeToggle />
           {/* Availability Toggle Button */}
           <Button
             onClick={() => {
@@ -552,7 +717,7 @@ export default function DriverApp() {
               setDriverAvailable(!driverAvailable);
               toast.success(`Status: ${!driverAvailable ? "Disponibil" : "Indisponibil"}`);
             }}
-            className={`text-xs font-semibold px-4 py-2 ${
+            className={`text-xs font-semibold px-2.5 md:px-4 py-2 whitespace-nowrap ${
               rideAccepted || activeRide ? "bg-orange-700 hover:bg-orange-800" :
               pendingRide ? "bg-blue-700 hover:bg-blue-800" :
               driverAvailable ? "bg-green-700 hover:bg-green-800" : "bg-red-700 hover:bg-red-800"
@@ -561,18 +726,26 @@ export default function DriverApp() {
           >
             {rideAccepted || activeRide ? "Ocupat" : pendingRide ? "Cursă nouă!" : driverAvailable ? "Disponibil" : "Indisponibil"}
           </Button>
-          <Button variant="ghost" size="sm" onClick={handleLogout} className="text-gray-400 hover:text-white text-xs">
+          <Button variant="ghost" size="sm" onClick={handleLogout} className="text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white text-xs">
             Ieșire
           </Button>
         </div>
       </header>
 
+      {/* PTT Incoming Indicator */}
+      {pttIncoming && (
+        <div className="bg-blue-600 text-white px-4 py-2 flex items-center justify-center gap-2 text-sm font-semibold animate-pulse">
+          <Mic className="w-4 h-4" />
+          <span>🔊 Dispecerul transmite...</span>
+        </div>
+      )}
+
       {/* Map */}
-      <div className="flex-1 relative bg-gray-800 overflow-hidden">
+      <div className="flex-1 relative bg-gray-200 dark:bg-gray-800 overflow-hidden" style={{ isolation: "isolate" }}>
         <MapView onMapReady={handleMapReady} className="w-full h-full" />
 
         {/* Map Legend */}
-        <div className="absolute top-4 right-4 bg-gray-900 bg-opacity-90 rounded-lg p-3 text-xs text-white border border-gray-700">
+        <div className="absolute top-2 right-2 md:top-4 md:right-4 bg-white/90 dark:bg-gray-900/90 rounded-lg p-2 md:p-3 text-[10px] md:text-xs text-gray-900 dark:text-white border border-gray-300 dark:border-gray-700 z-[1000]">
           <div className="font-semibold mb-2 text-yellow-400">Legendă</div>
           <div className="flex items-center gap-2 mb-2">
             <div className="w-3 h-3 bg-amber-500 rounded-full"></div>
@@ -584,21 +757,21 @@ export default function DriverApp() {
           </div>
         </div>
 
-        {rideAccepted && estimatedArrival && (
-          <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-blue-900 bg-opacity-95 rounded-xl px-4 py-2 flex items-center gap-2 shadow-lg">
+        {(rideAccepted || pendingRide) && estimatedArrival && (
+          <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-blue-900 bg-opacity-95 rounded-xl px-4 py-2 flex items-center gap-2 shadow-lg z-[1000]">
             <Clock className="w-4 h-4 text-blue-300" />
             <span className="text-white text-sm font-medium">~{estimatedArrival} min până la client</span>
           </div>
         )}
 
         {!rideAccepted && !pendingRide && driverAvailable && (
-          <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-green-900 bg-opacity-90 rounded-xl px-4 py-2 flex items-center gap-2 shadow-lg">
+          <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-green-900 bg-opacity-90 rounded-xl px-4 py-2 flex items-center gap-2 shadow-lg z-[1000]">
             <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
             <span className="text-white text-sm">Disponibil - așteptați curse</span>
           </div>
         )}
         {!rideAccepted && !pendingRide && !driverAvailable && (
-          <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-red-900 bg-opacity-90 rounded-xl px-4 py-2 flex items-center gap-2 shadow-lg">
+          <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-red-900 bg-opacity-90 rounded-xl px-4 py-2 flex items-center gap-2 shadow-lg z-[1000]">
             <div className="w-2 h-2 bg-red-400 rounded-full animate-pulse"></div>
             <span className="text-white text-sm">Indisponibil - nu primesc curse</span>
           </div>
@@ -606,11 +779,11 @@ export default function DriverApp() {
       </div>
 
       {/* Bottom Panel */}
-      <div className="bg-gray-900 border-t border-gray-800 p-4">
+      <div className="bg-white dark:bg-gray-900 border-t border-gray-200 dark:border-gray-800 p-4 max-h-[55vh] overflow-y-auto md:max-h-none">
         {/* Pending ride notification */}
         {pendingRide && !rideAccepted && (
           <div className="flex flex-col gap-3">
-            <div className="bg-blue-900 border border-blue-600 rounded-xl p-4">
+            <div className={`bg-blue-900 border border-blue-600 rounded-xl p-4 ${rideAlertFlash ? "border-glow-blue alert-flash" : ""}`}>
               <div className="flex items-center justify-between mb-3">
                 <div className="flex items-center gap-2">
                   <div className="w-2 h-2 bg-blue-400 rounded-full animate-pulse"></div>
@@ -639,6 +812,12 @@ export default function DriverApp() {
                     <div className="flex items-center gap-1 mt-1">
                       <MapPin className="w-3 h-3 text-gray-400" />
                       <span className="text-gray-400 text-xs">{pendingRide.address}</span>
+                    </div>
+                  )}
+                  {estimatedArrival && (
+                    <div className="flex items-center gap-1 mt-1">
+                      <Navigation className="w-3 h-3 text-blue-400" />
+                      <span className="text-blue-400 text-sm font-medium">~{estimatedArrival} min distanță</span>
                     </div>
                   )}
                 </div>
@@ -718,23 +897,23 @@ export default function DriverApp() {
         {/* Idle state */}
         {!pendingRide && !rideAccepted && !activeRide && (
           <div className="text-center py-4">
-            <Car className="w-12 h-12 mx-auto text-gray-600 mb-2" />
-            <p className="text-gray-400">{driverAvailable ? "Disponibil - așteptați curse noi" : "Indisponibil - nu primesc curse"}</p>
-            <p className="text-gray-600 text-xs mt-1">GPS activ, locația se transmite în timp real</p>
+            <Car className="w-12 h-12 mx-auto text-gray-400 dark:text-gray-600 mb-2" />
+            <p className="text-gray-500 dark:text-gray-400">{driverAvailable ? "Disponibil - așteptați curse noi" : "Indisponibil - nu primesc curse"}</p>
+            <p className="text-gray-400 dark:text-gray-600 text-xs mt-1">GPS activ, locația se transmite în timp real</p>
           </div>
         )}
       </div>
 
       {/* Rating Modal */}
       {showRatingModal && activeRide && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <Card className="w-96 bg-gray-900 border-gray-700">
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <Card className="w-full max-w-sm max-h-[90vh] overflow-y-auto bg-white dark:bg-gray-900 border-gray-300 dark:border-gray-700">
             <CardHeader>
               <CardTitle className="text-white">Evaluează clientul</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
               <div>
-                <label className="text-gray-300 text-sm">Rating (1-5 stele)</label>
+                <label className="text-gray-600 dark:text-gray-300 text-sm">Rating (1-5 stele)</label>
                 <div className="flex gap-2 mt-2">
                   {[1, 2, 3, 4, 5].map((star) => (
                     <button
@@ -750,12 +929,12 @@ export default function DriverApp() {
                 </div>
               </div>
               <div>
-                <label className="text-gray-300 text-sm">Comentariu (opțional)</label>
+                <label className="text-gray-600 dark:text-gray-300 text-sm">Comentariu (opțional)</label>
                 <Input
                   placeholder="Scrie un comentariu..."
                   value={ratingComment}
                   onChange={(e) => setRatingComment(e.target.value)}
-                  className="bg-gray-800 border-gray-700 text-white mt-2"
+                  className="bg-gray-50 dark:bg-gray-800 border-gray-300 dark:border-gray-700 text-gray-900 dark:text-white mt-2"
                 />
               </div>
               <div className="flex gap-2">
@@ -791,8 +970,8 @@ export default function DriverApp() {
 
       {/* Panic Confirmation Modal */}
       {showPanicConfirm && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <Card className="w-96 bg-gray-900 border-red-700">
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <Card className="w-full max-w-sm max-h-[90vh] overflow-y-auto bg-white dark:bg-gray-900 border-red-700">
             <CardHeader>
               <CardTitle className="text-red-400 flex items-center gap-2">
                 <span className="text-2xl">🚨</span>

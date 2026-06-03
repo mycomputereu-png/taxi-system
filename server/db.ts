@@ -108,6 +108,13 @@ async function runMigrations() {
     ).catch(() => {
       // Column might already exist, ignore error
     });
+
+    // Add passwordHash column to clients for phone+password auth
+    await db.execute(
+      "ALTER TABLE `clients` ADD COLUMN `passwordHash` varchar(256) NULL"
+    ).catch(() => {
+      // Column might already exist, ignore error
+    });
     
     // Fix distanceKm column name to distance_km if it exists as distanceKm
     await db.execute(
@@ -166,6 +173,13 @@ export async function getUserByOpenId(openId: string) {
   return result[0];
 }
 
+export async function getUserByEmail(email: string) {
+  const db = await getDb();
+  if (!db) return undefined;
+  const result = await db.select().from(users).where(eq(users.email, email)).limit(1);
+  return result[0];
+}
+
 // ─── Drivers ─────────────────────────────────────────────────────────────────
 
 export async function createDriver(data: InsertDriver): Promise<void> {
@@ -188,10 +202,27 @@ export async function getDriverById(id: number): Promise<Driver | undefined> {
   return result[0];
 }
 
-export async function getAllDrivers(): Promise<Driver[]> {
+export async function getAllDrivers(): Promise<(Driver & { lastCompletedRideAt?: Date | null })[]> {
   const db = await getDb();
   if (!db) return [];
-  return db.select().from(drivers).orderBy(desc(drivers.createdAt));
+  const lastCompleted = db
+    .select({
+      driverId: rides.driverId,
+      lastCompletedAt: sql<Date>`MAX(${rides.completedAt})`.as("lastCompletedAt"),
+    })
+    .from(rides)
+    .where(eq(rides.status, "completed"))
+    .groupBy(rides.driverId)
+    .as("lastCompleted");
+  const result = await db
+    .select({
+      ...getTableColumns(drivers),
+      lastCompletedRideAt: lastCompleted.lastCompletedAt,
+    })
+    .from(drivers)
+    .leftJoin(lastCompleted, eq(drivers.id, lastCompleted.driverId))
+    .orderBy(sql`CASE WHEN ${lastCompleted.lastCompletedAt} IS NULL THEN 1 ELSE 0 END`, sql`${lastCompleted.lastCompletedAt} ASC`);
+  return result;
 }
 
 export async function getAvailableDrivers(): Promise<Driver[]> {
@@ -266,6 +297,22 @@ export async function upsertClient(phone: string, name?: string): Promise<Client
     .onDuplicateKeyUpdate({ set: { name: name ?? null } });
   const result = await db.select().from(clients).where(eq(clients.phone, phone)).limit(1);
   console.log(`[DB] upsertClient result: id=${result[0]?.id}, phone=${result[0]?.phone}`);
+  return result[0]!;
+}
+
+export async function registerClient(
+  phone: string,
+  passwordHash: string,
+  name: string
+): Promise<Client> {
+  const db = await getDb();
+  if (!db) throw new Error("DB not available");
+  console.log(`[DB] registerClient: phone=${phone}, name=${name}`);
+  await db
+    .insert(clients)
+    .values({ phone, passwordHash, name })
+    .onDuplicateKeyUpdate({ set: { passwordHash, name } });
+  const result = await db.select().from(clients).where(eq(clients.phone, phone)).limit(1);
   return result[0]!;
 }
 

@@ -1,7 +1,8 @@
 
 import { TRPCError } from "@trpc/server";
 import bcrypt from "bcryptjs";
-import crypto from "crypto";
+import { AccessToken } from "livekit-server-sdk";
+
 import { nanoid } from "nanoid";
 import { z } from "zod";
 import {
@@ -30,8 +31,10 @@ import {
   updateDriverStatus,
   updateRideStatus,
   upsertClient,
+  registerClient,
   upsertUser,
   getUserByOpenId,
+  getUserByEmail,
   submitClientRating,
   getAllClientsWithRatings,
   getClientProfile,
@@ -43,7 +46,8 @@ import {
   type ActiveRide,
 } from "./db";
 import { getSessionCookieOptions } from "./_core/cookies";
-const COOKIE_NAME = "session";
+import { COOKIE_NAME, ONE_YEAR_MS } from "../shared/const";
+import { sdk } from "./_core/sdk";
 import { systemRouter } from "./_core/systemRouter";
 import { protectedProcedure, publicProcedure, router } from "./_core/trpc";
 import { emitToClient, emitToDispatchers, emitToDriver, setRideAcceptanceTimeout, clearRideAcceptanceTimeout } from "./socket";
@@ -58,19 +62,50 @@ function generateOtpCode() {
   return Math.floor(100000 + Math.random() * 900000).toString();
 }
 
+// ─── Haversine distance (km) between two GPS coordinates ─────────────────────
+function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number): number {
+  const R = 6371;
+  const dLat = ((lat2 - lat1) * Math.PI) / 180;
+  const dLng = ((lng2 - lng1) * Math.PI) / 180;
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos((lat1 * Math.PI) / 180) * Math.cos((lat2 * Math.PI) / 180) * Math.sin(dLng / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
 // ─── Router ───────────────────────────────────────────────────────────────────
 
 export const appRouter = router({
   system: systemRouter,
 
-  // ─── Manus OAuth (Dispatcher) ───────────────────────────────────────────────
+  // ─── Dispatcher Auth (Email/Password) ─────────────────────────────────────
   auth: router({
     me: publicProcedure.query((opts) => opts.ctx.user),
     logout: publicProcedure.mutation(({ ctx }) => {
       const cookieOptions = getSessionCookieOptions(ctx.req);
-      ctx.res.clearCookie("session", { ...cookieOptions, maxAge: -1 });
+      ctx.res.clearCookie(COOKIE_NAME, { ...cookieOptions, maxAge: -1 });
       return { success: true } as const;
     }),
+    dispatcherLogin: publicProcedure
+      .input(z.object({ email: z.string().email(), password: z.string() }))
+      .mutation(async ({ input, ctx }) => {
+        const user = await getUserByEmail(input.email);
+        if (!user || !user.passwordHash) {
+          throw new TRPCError({ code: "UNAUTHORIZED", message: "Email sau parolă incorectă" });
+        }
+        const valid = await bcrypt.compare(input.password, user.passwordHash);
+        if (!valid) {
+          throw new TRPCError({ code: "UNAUTHORIZED", message: "Email sau parolă incorectă" });
+        }
+        const sessionToken = await sdk.createSessionToken(user.openId, {
+          name: user.name || "",
+          expiresInMs: ONE_YEAR_MS,
+        });
+        const cookieOptions = getSessionCookieOptions(ctx.req);
+        ctx.res.cookie(COOKIE_NAME, sessionToken, { ...cookieOptions, maxAge: ONE_YEAR_MS });
+        await upsertUser({ openId: user.openId, lastSignedIn: new Date() });
+        return { success: true, name: user.name };
+      }),
     updateClientName: publicProcedure
       .input(z.object({ token: z.string(), name: z.string() }))
       .mutation(async ({ input }) => {
@@ -96,15 +131,14 @@ export const appRouter = router({
       .mutation(async ({ input }) => {
         const driver = await getDriverByUsername(input.username);
         if (!driver) throw new TRPCError({ code: "UNAUTHORIZED", message: "Invalid credentials" });
-        // Use PBKDF2 for password verification (fixes hash truncation issue)
-        const hash = crypto.pbkdf2Sync(input.password, "taxibucovina", 100000, 64, "sha512").toString("hex");
-        const valid = hash === driver.passwordHash;
+        const valid = await bcrypt.compare(input.password, driver.passwordHash);
         if (!valid) throw new TRPCError({ code: "UNAUTHORIZED", message: "Invalid credentials" });
         const token = generateToken();
         const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
         await createDriverSession(driver.id, token, expiresAt);
         await updateDriverStatus(driver.id, "available");
-        return { token, driver };
+        const { passwordHash: _, ...safeDriver } = driver;
+        return { token, driver: safeDriver };
       }),
 
     logout: publicProcedure
@@ -277,6 +311,12 @@ export const appRouter = router({
           rating: input.rating,
           comment: input.comment,
         });
+        emitToDispatchers("client:rated", {
+          clientId: input.clientId,
+          driverId: driver.id,
+          rideId: input.rideId,
+          rating: input.rating,
+        });
         return { success: true };
       }),
     updateClientName: publicProcedure
@@ -299,6 +339,59 @@ export const appRouter = router({
 
   // ─── Client Auth ────────────────────────────────────────────────────────────
   clientApp: router({
+    // Create an account with phone + password + name
+    register: publicProcedure
+      .input(
+        z.object({
+          phone: z.string().min(10, "Număr de telefon invalid"),
+          password: z.string().min(6, "Parola trebuie să aibă minim 6 caractere"),
+          name: z.string().min(2, "Introdu numele"),
+        })
+      )
+      .mutation(async ({ input }) => {
+        const phone = input.phone.trim();
+        const existing = await getClientByPhone(phone);
+        if (existing && existing.passwordHash) {
+          throw new TRPCError({
+            code: "CONFLICT",
+            message: "Există deja un cont cu acest număr. Autentifică-te.",
+          });
+        }
+        const passwordHash = await bcrypt.hash(input.password, 10);
+        const client = await registerClient(phone, passwordHash, input.name.trim());
+        const token = generateToken();
+        const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+        await createClientSession(client.id, token, expiresAt);
+        const { passwordHash: _ph, ...safeClient } = client;
+        return { token, client: safeClient };
+      }),
+
+    // Log in with phone + password
+    login: publicProcedure
+      .input(z.object({ phone: z.string(), password: z.string() }))
+      .mutation(async ({ input }) => {
+        const phone = input.phone.trim();
+        const client = await getClientByPhone(phone);
+        if (!client || !client.passwordHash) {
+          throw new TRPCError({
+            code: "UNAUTHORIZED",
+            message: "Telefon sau parolă incorectă",
+          });
+        }
+        const valid = await bcrypt.compare(input.password, client.passwordHash);
+        if (!valid) {
+          throw new TRPCError({
+            code: "UNAUTHORIZED",
+            message: "Telefon sau parolă incorectă",
+          });
+        }
+        const token = generateToken();
+        const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+        await createClientSession(client.id, token, expiresAt);
+        const { passwordHash: _ph, ...safeClient } = client;
+        return { token, client: safeClient };
+      }),
+
     sendOtp: publicProcedure
       .input(z.object({ phone: z.string() }))
       .mutation(async ({ input }) => {
@@ -328,7 +421,8 @@ export const appRouter = router({
         const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
         await createClientSession(client.id, token, expiresAt);
         console.log(`[verifyOtp] Session created for client ${client.id}`);
-        return { token, client };
+        const { passwordHash: _ph, ...safeClient } = client;
+        return { token, client: safeClient };
       }),
 
     logout: publicProcedure
@@ -522,8 +616,12 @@ export const appRouter = router({
         });
 
         const countdown = 30;
+        const client = await getClientById_safe(ride.clientId);
         emitToDriver(input.driverId, "ride:assigned", {
           rideId: ride.id,
+          clientId: ride.clientId,
+          clientPhone: client?.phone,
+          clientName: client?.name,
           clientLat: ride.clientLat,
           clientLng: ride.clientLng,
           clientAddress: ride.clientAddress,
@@ -538,6 +636,82 @@ export const appRouter = router({
         });
         emitToDispatchers("ride:assigned", { rideId: ride.id, driverId: input.driverId });
         return { success: true };
+      }),
+
+    autoAssignRide: protectedProcedure
+      .input(z.object({ rideId: z.number() }))
+      .mutation(async ({ input }) => {
+        const ride = await getRideById(input.rideId);
+        if (!ride) throw new TRPCError({ code: "NOT_FOUND", message: "Cursa nu a fost găsită" });
+        if (ride.status !== "pending") throw new TRPCError({ code: "BAD_REQUEST", message: "Cursa nu mai este în așteptare" });
+        if (!ride.clientLat || !ride.clientLng) throw new TRPCError({ code: "BAD_REQUEST", message: "Locația clientului lipsește" });
+
+        const available = await getAvailableDrivers();
+        if (available.length === 0) {
+          return { success: false, reason: "no_drivers", message: "Niciun șofer disponibil" };
+        }
+
+        const clientLat = parseFloat(String(ride.clientLat));
+        const clientLng = parseFloat(String(ride.clientLng));
+
+        // Find nearest driver with known GPS location
+        let nearest: { id: number; name: string; distance: number } | null = null;
+        for (const d of available) {
+          if (!d.currentLat || !d.currentLng) continue;
+          const dist = haversineKm(clientLat, clientLng, parseFloat(String(d.currentLat)), parseFloat(String(d.currentLng)));
+          if (!nearest || dist < nearest.distance) {
+            nearest = { id: d.id, name: d.name, distance: dist };
+          }
+        }
+
+        if (!nearest) {
+          // Drivers exist but none have GPS — fall back to first available
+          const fallback = available[0];
+          nearest = { id: fallback.id, name: fallback.name, distance: -1 };
+        }
+
+        const driverId = nearest.id;
+        await assignRide(input.rideId, driverId);
+
+        // Set 30-second acceptance timeout (same as manual assign)
+        setRideAcceptanceTimeout(input.rideId, async () => {
+          const updatedRide = await getRideById(input.rideId);
+          if (updatedRide && updatedRide.status === "assigned") {
+            await updateRideStatus(input.rideId, "pending");
+            await updateDriverStatus(driverId, "available");
+            emitToDriver(driverId, "ride:timeout", { rideId: input.rideId });
+            emitToClient(updatedRide.clientId, "ride:reassigning", { rideId: input.rideId });
+            emitToDispatchers("ride:reassigning", { rideId: input.rideId });
+          }
+        });
+
+        const countdown = 30;
+        const client = await getClientById_safe(ride.clientId);
+        emitToDriver(driverId, "ride:assigned", {
+          rideId: ride.id,
+          clientId: ride.clientId,
+          clientPhone: client?.phone,
+          clientName: client?.name,
+          clientLat: ride.clientLat,
+          clientLng: ride.clientLng,
+          clientAddress: ride.clientAddress,
+          destinationLat: ride.destinationLat,
+          destinationLng: ride.destinationLng,
+          destinationAddress: ride.destinationAddress,
+          countdown,
+        });
+        const driver = await getDriverById(driverId);
+        emitToClient(ride.clientId, "ride:assigned", {
+          driverId,
+          driverName: driver?.name ?? "Șofer",
+        });
+        emitToDispatchers("ride:assigned", { rideId: ride.id, driverId });
+        return {
+          success: true,
+          driverId,
+          driverName: nearest.name,
+          distanceKm: nearest.distance >= 0 ? Math.round(nearest.distance * 10) / 10 : null,
+        };
       }),
 
     getPendingRides: protectedProcedure.query(async () => {
@@ -722,6 +896,27 @@ export const appRouter = router({
 async function getClientById_safe(clientId: number) {
   const { getClientById } = await import("./db");
   return getClientById(clientId);
+}
+
+// ─── LiveKit Token Generation ─────────────────────────────────────────────────
+
+const LIVEKIT_API_KEY = process.env.LIVEKIT_API_KEY || "APItaxi75ff2872f89f";
+const LIVEKIT_API_SECRET = process.env.LIVEKIT_API_SECRET || "cd241534d8e6bf4ecbeab2c402a32c20465a8998dc62ade37a01d3efc3ab7d1b";
+
+export async function generateLivekitToken(identity: string, room: string, metadata?: string): Promise<string> {
+  const token = new AccessToken(LIVEKIT_API_KEY, LIVEKIT_API_SECRET, {
+    identity,
+    ttl: "1h",
+    ...(metadata ? { metadata } : {}),
+  });
+  token.addGrant({
+    roomJoin: true,
+    room,
+    canPublish: true,
+    canSubscribe: true,
+    canUpdateOwnMetadata: true,
+  });
+  return await token.toJwt();
 }
 
 export type AppRouter = typeof appRouter;

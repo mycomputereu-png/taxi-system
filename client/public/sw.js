@@ -4,7 +4,9 @@ const RUNTIME_CACHE = 'taxi-bucovina-runtime';
 const ASSETS_TO_CACHE = [
   '/',
   '/index.html',
-  '/manifest.json'
+  '/manifest.json',
+  '/manifest-client.json',
+  '/manifest-driver.json'
 ];
 
 // Install event - cache assets

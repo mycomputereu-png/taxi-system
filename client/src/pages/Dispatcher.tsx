@@ -1,7 +1,8 @@
 import { useState, useRef, useEffect, useCallback } from "react";
+import L from "leaflet";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { trpc } from "@/lib/trpc";
-import { MapView } from "@/components/Map";
+import { MapView, createSvgIcon } from "@/components/Map";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -9,12 +10,15 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
-import { getLoginUrl } from "@/const";
 import { useSocket, getSocket } from "@/hooks/useSocket";
 import { DriverDetailsModal } from "@/components/DriverDetailsModal";
 import {
-  MapPin, Users, Car, Clock, Plus, Trash2, LogOut, CheckCircle, XCircle, Navigation, Star, Phone, ArrowLeft
+  MapPin, Users, Car, Clock, Plus, Trash2, LogOut, CheckCircle, XCircle, Navigation, Star, Phone, ArrowLeft, Zap, Hand, Mic
 } from "lucide-react";
+import { ThemeToggle } from "@/components/ThemeToggle";
+import { playNewRideSound } from "@/lib/alerts";
+import { useWakeLock } from "@/hooks/useWakeLock";
+import { Room, RoomEvent, Track, RemoteTrackPublication, RemoteParticipant, TrackPublication, Participant } from "livekit-client";
 
 
 type DriverMarker = {
@@ -23,7 +27,7 @@ type DriverMarker = {
   lat: number;
   lng: number;
   status: string;
-  marker?: google.maps.Marker;
+  marker?: L.Marker;
 };
 
 type ClientMarker = {
@@ -33,7 +37,7 @@ type ClientMarker = {
   name?: string;
   lat: number;
   lng: number;
-  marker?: google.maps.Marker;
+  marker?: L.Marker;
 };
 
 type RideWithClientDriver = {
@@ -75,13 +79,26 @@ type RideWithClientDriver = {
 };
 
 export default function Dispatcher() {
-  const { user, loading, isAuthenticated, logout } = useAuth();
+  // Keep the screen awake while the dispatcher console is open in the foreground.
+  useWakeLock(true);
+  const { user, loading, isAuthenticated, logout, refresh } = useAuth();
   const { emit, on, socket: socketRef } = useSocket();
 
+  const [loginEmail, setLoginEmail] = useState("");
+  const [loginPassword, setLoginPassword] = useState("");
+  const [loginError, setLoginError] = useState("");
+  const loginMut = trpc.auth.dispatcherLogin.useMutation({
+    onSuccess: () => {
+      setLoginError("");
+      refresh();
+    },
+    onError: (err) => setLoginError(err.message),
+  });
+
   const [mapReady, setMapReady] = useState(false);
-  const mapRef = useRef<google.maps.Map | null>(null);
-  const driverMarkersRef = useRef<Map<number, google.maps.Marker>>(new Map());
-  const clientMarkersRef = useRef<Map<number, google.maps.Marker>>(new Map());
+  const mapRef = useRef<L.Map | null>(null);
+  const driverMarkersRef = useRef<Map<number, L.Marker>>(new Map());
+  const clientMarkersRef = useRef<Map<number, L.Marker>>(new Map());
   const [driverLocations, setDriverLocations] = useState<Map<number, DriverMarker>>(new Map());
   const [clientLocations, setClientLocations] = useState<Map<number, ClientMarker>>(new Map());
   const [selectedRide, setSelectedRide] = useState<number | null>(null);
@@ -94,7 +111,19 @@ export default function Dispatcher() {
   const [selectedPanicAlertId, setSelectedPanicAlertId] = useState<number | null>(null);
   const [panicResponseNote, setPanicResponseNote] = useState("");
   const [selectedDriver, setSelectedDriver] = useState<any | null>(null);
+  const [newRideFlash, setNewRideFlash] = useState(false);
   const [driverDetailsOpen, setDriverDetailsOpen] = useState(false);
+  const [autoAssign, setAutoAssign] = useState<boolean>(() => {
+    try { return localStorage.getItem("dispatcher_auto_assign") === "true"; } catch { return false; }
+  });
+  const autoAssignRef = useRef(autoAssign);
+  useEffect(() => { autoAssignRef.current = autoAssign; }, [autoAssign]);
+
+  // PTT (Push-to-Talk) state - LiveKit
+  const [pttActive, setPttActive] = useState(false);
+  const [pttIncoming, setPttIncoming] = useState<{ driverName: string; driverId: number } | null>(null);
+  const livekitRoomRef = useRef<Room | null>(null);
+  const livekitConnectedRef = useRef(false);
 
   // tRPC queries
   const utils = trpc.useUtils();
@@ -151,6 +180,19 @@ export default function Dispatcher() {
       setSelectedRide(null);
     },
     onError: (e) => toast.error(e.message),
+  });
+
+  const autoAssignMut = trpc.dispatcher.autoAssignRide.useMutation({
+    onSuccess: (data) => {
+      if (data.success) {
+        const distInfo = data.distanceKm != null ? ` (${data.distanceKm} km)` : "";
+        toast.success(`Asignare automată: ${data.driverName}${distInfo}`);
+      } else {
+        toast.warning(data.message ?? "Nu s-a putut asigna automat");
+      }
+      utils.dispatcher.getActiveRides.invalidate();
+    },
+    onError: (e) => toast.error(`Auto-asignare eșuată: ${e.message}`),
   });
 
   const cancelRideMut = trpc.dispatcher.cancelRide.useMutation({
@@ -218,6 +260,9 @@ export default function Dispatcher() {
 
     const unsubRideNew = on("ride:new", (data: any) => {
       console.log("[Dispatcher] Ride new event received:", data);
+      playNewRideSound();
+      setNewRideFlash(true);
+      setTimeout(() => setNewRideFlash(false), 3000);
       toast.info(`🚖 Cerere nouă taxi de la ${data.clientPhone}`, { duration: 8000 });
       setClientLocations((prev) => {
         const next = new Map(prev);
@@ -233,6 +278,10 @@ export default function Dispatcher() {
         return next;
       });
       utils.dispatcher.getActiveRides.invalidate();
+      if (autoAssignRef.current && data.rideId) {
+        console.log("[Dispatcher] Auto-assign enabled, assigning ride", data.rideId);
+        autoAssignMut.mutate({ rideId: data.rideId });
+      }
     });
 
     const unsubRideStatus = on("ride:status", () => {
@@ -302,97 +351,61 @@ export default function Dispatcher() {
 
   // Update map markers
   useEffect(() => {
-    console.log("[Dispatcher] Map marker update effect triggered, mapReady:", mapReady, "driverLocations:", driverLocations.size);
     if (!mapReady || !mapRef.current) return;
 
     // Driver markers (green with arrow)
     driverLocations.forEach((d) => {
-      console.log("[Dispatcher] Rendering driver marker for driver", d.id, "at", d.lat, d.lng);
       let marker = driverMarkersRef.current.get(d.id);
+      const fillColor = d.status === "available" ? "#22c55e" : "#f59e0b";
       if (!marker) {
-        marker = new google.maps.Marker({
-          map: mapRef.current!,
-          icon: {
-            path: google.maps.SymbolPath.FORWARD_CLOSED_ARROW,
-            scale: 8,
-            fillColor: "#22c55e",
-            fillOpacity: 1,
-            strokeColor: "#fff",
-            strokeWeight: 2,
-          },
+        marker = L.marker([d.lat, d.lng], {
+          icon: createSvgIcon(fillColor, "arrow"),
           title: d.name,
-          zIndex: 100,
-          animation: google.maps.Animation.DROP,
-        });
-        const infoWindow = new google.maps.InfoWindow();
-        marker.addListener("click", () => {
-          const statusColor = d.status === "available" ? "#22c55e" : "#f59e0b";
-          infoWindow.setContent(
-            `<div style="background:#1f2937;color:#fff;padding:12px;border-radius:8px;font-family:Arial,sans-serif;">
-              <div style="font-weight:bold;font-size:14px;margin-bottom:4px;">${d.name}</div>
-              <div style="font-size:12px;color:#9ca3af;margin-bottom:6px;">ID: ${d.id}</div>
-              <div style="display:inline-block;padding:4px 8px;background:${statusColor};color:#fff;border-radius:4px;font-size:11px;font-weight:bold;">${d.status.toUpperCase()}</div>
-            </div>`
-          );
-          infoWindow.open(mapRef.current!, marker);
-        });
+          zIndexOffset: 100,
+        }).addTo(mapRef.current!);
+        const statusColor = d.status === "available" ? "#22c55e" : "#f59e0b";
+        marker.bindPopup(
+          `<div style="background:#1f2937;color:#fff;padding:12px;border-radius:8px;font-family:Arial,sans-serif;">
+            <div style="font-weight:bold;font-size:14px;margin-bottom:4px;">${d.name}</div>
+            <div style="font-size:12px;color:#9ca3af;margin-bottom:6px;">ID: ${d.id}</div>
+            <div style="display:inline-block;padding:4px 8px;background:${statusColor};color:#fff;border-radius:4px;font-size:11px;font-weight:bold;">${d.status.toUpperCase()}</div>
+          </div>`,
+          { className: "dark-popup" }
+        );
         driverMarkersRef.current.set(d.id, marker);
       }
-      marker.setPosition({ lat: d.lat, lng: d.lng });
-      // Update icon color based on status
-      const fillColor = d.status === "available" ? "#22c55e" : "#f59e0b";
-      marker.setIcon({
-        path: google.maps.SymbolPath.FORWARD_CLOSED_ARROW,
-        scale: 8,
-        fillColor: fillColor,
-        fillOpacity: 1,
-        strokeColor: "#fff",
-        strokeWeight: 2,
-      });
+      marker.setLatLng([d.lat, d.lng]);
+      marker.setIcon(createSvgIcon(fillColor, "arrow"));
     });
 
     // Client markers (red circle)
-    console.log("[Dispatcher] Rendering client markers, count:", clientLocations.size);
     clientLocations.forEach((c) => {
-      console.log("[Dispatcher] Processing client marker:", c);
       let marker = clientMarkersRef.current.get(c.id);
       if (!marker) {
-        marker = new google.maps.Marker({
-          map: mapRef.current!,
-          icon: {
-            path: google.maps.SymbolPath.CIRCLE,
-            scale: 10,
-            fillColor: "#ef4444",
-            fillOpacity: 1,
-            strokeColor: "#fff",
-            strokeWeight: 3,
-          },
+        marker = L.marker([c.lat, c.lng], {
+          icon: createSvgIcon("#ef4444", "circle"),
           title: c.phone,
-          zIndex: 50,
-          animation: google.maps.Animation.DROP,
-        });
-        const infoWindow = new google.maps.InfoWindow();
-        marker.addListener("click", () => {
-          infoWindow.setContent(
-            `<div style="background:#1f2937;color:#fff;padding:12px;border-radius:8px;font-family:Arial,sans-serif;">
-              <div style="font-weight:bold;font-size:14px;margin-bottom:4px;">${c.name || "Client"}</div>
-              <div style="font-size:12px;color:#9ca3af;margin-bottom:4px;">${c.phone}</div>
-              <div style="font-size:11px;color:#9ca3af;margin-bottom:6px;">Cursă #${c.rideId}</div>
-              <button onclick="window.dispatchEvent(new CustomEvent('assignRide', {detail: ${c.rideId}})" style="background:#3b82f6;color:white;padding:6px 12px;border:none;border-radius:4px;cursor:pointer;font-size:12px;font-weight:bold;width:100%;">Asignează</button>
-            </div>`
-          );
-          infoWindow.open(mapRef.current!, marker);
-        });
+          zIndexOffset: 50,
+        }).addTo(mapRef.current!);
+        marker.bindPopup(
+          `<div style="background:#1f2937;color:#fff;padding:12px;border-radius:8px;font-family:Arial,sans-serif;">
+            <div style="font-weight:bold;font-size:14px;margin-bottom:4px;">${c.name || "Client"}</div>
+            <div style="font-size:12px;color:#9ca3af;margin-bottom:4px;">${c.phone}</div>
+            <div style="font-size:11px;color:#9ca3af;margin-bottom:6px;">Cursă #${c.rideId}</div>
+            <button onclick="window.dispatchEvent(new CustomEvent('assignRide', {detail: ${c.rideId}}))" style="background:#3b82f6;color:white;padding:6px 12px;border:none;border-radius:4px;cursor:pointer;font-size:12px;font-weight:bold;width:100%;">Asignează</button>
+          </div>`,
+          { className: "dark-popup" }
+        );
         clientMarkersRef.current.set(c.id, marker);
       }
-      marker.setPosition({ lat: c.lat, lng: c.lng });
+      marker.setLatLng([c.lat, c.lng]);
     });
     // Fit bounds to show all markers
     if ((driverLocations.size > 0 || clientLocations.size > 0) && mapRef.current) {
-      const bounds = new google.maps.LatLngBounds();
-      driverLocations.forEach((d) => bounds.extend({ lat: d.lat, lng: d.lng }));
-      clientLocations.forEach((c) => bounds.extend({ lat: c.lat, lng: c.lng }));
-      mapRef.current.fitBounds(bounds, 100);
+      const bounds = L.latLngBounds([]);
+      driverLocations.forEach((d) => bounds.extend([d.lat, d.lng]));
+      clientLocations.forEach((c) => bounds.extend([c.lat, c.lng]));
+      mapRef.current.fitBounds(bounds, { padding: [100, 100] });
     }
   }, [mapReady, driverLocations, clientLocations]);
 
@@ -407,117 +420,183 @@ export default function Dispatcher() {
     return () => window.removeEventListener("assignRide", handler);
   }, []);
 
-  const handleMapReady = useCallback((map: google.maps.Map) => {
-    console.log("[Dispatcher] Map ready callback triggered");
+  // LiveKit PTT: connect to room on mount, stay connected to receive audio
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    const room = new Room();
+    livekitRoomRef.current = room;
+
+    const driverFromParticipant = (participant: Participant) => {
+      const name = participant.identity.replace("driver-", "");
+      const idMatch = participant.metadata?.match(/driverId:(\d+)/);
+      return { driverName: name, driverId: idMatch ? parseInt(idMatch[1]) : 0 };
+    };
+
+    // Handle incoming audio from drivers
+    const handleTrackSubscribed = (
+      track: RemoteTrackPublication["track"],
+      publication: RemoteTrackPublication,
+      participant: RemoteParticipant
+    ) => {
+      if (track && track.kind === Track.Kind.Audio) {
+        const el = track.attach() as HTMLAudioElement;
+        el.id = `lk-audio-${participant.identity}`;
+        el.autoplay = true;
+        el.muted = false;
+        el.volume = 1.0;
+        document.body.appendChild(el);
+        void el.play().catch(() => {});
+        if (publication.isMuted) {
+          setPttIncoming(null);
+        } else {
+          setPttIncoming(driverFromParticipant(participant));
+        }
+      }
+    };
+
+    const handleTrackUnsubscribed = (
+      track: RemoteTrackPublication["track"],
+      _publication: RemoteTrackPublication,
+      participant: RemoteParticipant
+    ) => {
+      if (track && track.kind === Track.Kind.Audio) {
+        track.detach().forEach((el) => el.remove());
+        setPttIncoming(null);
+      }
+    };
+
+    // setMicrophoneEnabled(false) mutes without unpublishing, so a driver's
+    // talking start/stop arrives as unmute/mute events, not subscribe/unsubscribe.
+    const handleTrackMuted = (publication: TrackPublication, participant: Participant) => {
+      if (publication.kind === Track.Kind.Audio && participant.identity.startsWith("driver-")) {
+        setPttIncoming(null);
+      }
+    };
+    const handleTrackUnmuted = (publication: TrackPublication, participant: Participant) => {
+      if (publication.kind === Track.Kind.Audio && participant.identity.startsWith("driver-")) {
+        setPttIncoming(driverFromParticipant(participant));
+      }
+    };
+
+    room.on(RoomEvent.TrackSubscribed, handleTrackSubscribed);
+    room.on(RoomEvent.TrackUnsubscribed, handleTrackUnsubscribed);
+    room.on(RoomEvent.TrackMuted, handleTrackMuted);
+    room.on(RoomEvent.TrackUnmuted, handleTrackUnmuted);
+
+    // Unlock audio playback if the browser blocks autoplay (no recent gesture)
+    const ensureAudioPlayback = () => {
+      void room.startAudio().catch(() => {});
+    };
+    room.on(RoomEvent.AudioPlaybackStatusChanged, () => {
+      if (!room.canPlaybackAudio) {
+        document.addEventListener("pointerdown", ensureAudioPlayback, { once: true });
+        document.addEventListener("touchstart", ensureAudioPlayback, { once: true });
+      }
+    });
+
+    // Connect to LiveKit room
+    (async () => {
+      try {
+        const resp = await fetch("/api/livekit/token", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ identity: "dispatcher", room: "ptt-room" }),
+        });
+        const { token } = await resp.json();
+        const wsUrl = `wss://${window.location.host}/livekit`;
+        await room.connect(wsUrl, token);
+        livekitConnectedRef.current = true;
+        console.log("[LiveKit] Dispatcher connected to ptt-room");
+      } catch (err) {
+        console.error("[LiveKit] Connection error:", err);
+      }
+    })();
+
+    return () => {
+      room.disconnect();
+      livekitConnectedRef.current = false;
+      livekitRoomRef.current = null;
+    };
+  }, [isAuthenticated]);
+
+  // PTT start/stop handlers (LiveKit)
+  const pttStart = useCallback(async () => {
+    const room = livekitRoomRef.current;
+    if (!room || !livekitConnectedRef.current) {
+      toast.error("Radio nu este conectat");
+      return;
+    }
+    try {
+      await room.localParticipant.setMicrophoneEnabled(true);
+      setPttActive(true);
+    } catch (err) {
+      toast.error("Nu s-a putut accesa microfonul");
+    }
+  }, []);
+
+  const pttStop = useCallback(async () => {
+    const room = livekitRoomRef.current;
+    if (room) {
+      await room.localParticipant.setMicrophoneEnabled(false);
+    }
+    setPttActive(false);
+  }, []);
+
+  const handleMapReady = useCallback((map: L.Map) => {
     mapRef.current = map;
     setMapReady(true);
-    // Set initial view to Bucharest
-    map.setCenter({ lat: 44.4268, lng: 26.1025 });
-    map.setZoom(13);
-    console.log("[Dispatcher] Map initialized and centered");
-    // Add map styles for better visibility
-    map.setOptions({
-      styles: [
-        { elementType: "geometry", stylers: [{ color: "#242f3e" }] },
-        { elementType: "labels.text.stroke", stylers: [{ color: "#242f3e" }] },
-        { elementType: "labels.text.fill", stylers: [{ color: "#746855" }] },
-        {
-          featureType: "administrative.locality",
-          elementType: "labels.text.fill",
-          stylers: [{ color: "#d59563" }],
-        },
-        {
-          featureType: "poi",
-          elementType: "labels.text.fill",
-          stylers: [{ color: "#d59563" }],
-        },
-        {
-          featureType: "poi.park",
-          elementType: "geometry",
-          stylers: [{ color: "#263c3f" }],
-        },
-        {
-          featureType: "poi.park",
-          elementType: "labels.text.fill",
-          stylers: [{ color: "#6b9080" }],
-        },
-        {
-          featureType: "road",
-          elementType: "geometry",
-          stylers: [{ color: "#38414e" }],
-        },
-        {
-          featureType: "road",
-          elementType: "geometry.stroke",
-          stylers: [{ color: "#212a37" }],
-        },
-        {
-          featureType: "road.highway",
-          elementType: "geometry",
-          stylers: [{ color: "#746855" }],
-        },
-        {
-          featureType: "road.highway",
-          elementType: "geometry.stroke",
-          stylers: [{ color: "#1f2835" }],
-        },
-        {
-          featureType: "road.highway",
-          elementType: "labels.text.fill",
-          stylers: [{ color: "#f3751ff" }],
-        },
-        {
-          featureType: "transit",
-          elementType: "geometry",
-          stylers: [{ color: "#2f3948" }],
-        },
-        {
-          featureType: "transit.station",
-          elementType: "labels.text.fill",
-          stylers: [{ color: "#d59563" }],
-        },
-        {
-          featureType: "water",
-          elementType: "geometry",
-          stylers: [{ color: "#17263c" }],
-        },
-        {
-          featureType: "water",
-          elementType: "labels.text.fill",
-          stylers: [{ color: "#515c6d" }],
-        },
-        {
-          featureType: "water",
-          elementType: "labels.text.stroke",
-          stylers: [{ color: "#17263c" }],
-        },
-      ],
-    });
+    map.setView([44.4268, 26.1025], 13);
   }, []);
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-950 flex items-center justify-center">
-        <div className="text-white text-xl">Se încarcă...</div>
+      <div className="min-h-screen bg-gray-100 dark:bg-gray-950 flex items-center justify-center">
+        <div className="text-gray-900 dark:text-white text-xl">Se încarcă...</div>
       </div>
     );
   }
 
   if (!isAuthenticated) {
     return (
-      <div className="min-h-screen bg-gray-950 flex items-center justify-center">
-        <Card className="w-96 bg-gray-900 border-gray-700">
+      <div className="min-h-screen bg-gray-100 dark:bg-gray-950 flex items-center justify-center p-4">
+        <Card className="w-full max-w-sm bg-white dark:bg-gray-900 border-gray-300 dark:border-gray-700">
           <CardHeader>
-            <CardTitle className="text-white text-center text-2xl">🚖 Dispatcher</CardTitle>
+            <CardTitle className="text-gray-900 dark:text-white text-center text-2xl">🚖 Dispatcher</CardTitle>
           </CardHeader>
           <CardContent className="flex flex-col gap-4">
-            <p className="text-gray-400 text-center">Autentifică-te pentru a accesa panoul de dispatcher</p>
-            <Button
-              className="w-full bg-yellow-500 hover:bg-yellow-600 text-black font-bold"
-              onClick={() => (window.location.href = getLoginUrl())}
+            <p className="text-gray-500 dark:text-gray-400 text-center">Autentifică-te pentru a accesa panoul de dispatcher</p>
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                loginMut.mutate({ email: loginEmail, password: loginPassword });
+              }}
+              className="flex flex-col gap-3"
             >
-              Autentificare Dispatcher
-            </Button>
+              <Input
+                type="email"
+                placeholder="Email"
+                value={loginEmail}
+                onChange={(e) => setLoginEmail(e.target.value)}
+                className="bg-gray-50 dark:bg-gray-800 border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white"
+                required
+              />
+              <Input
+                type="password"
+                placeholder="Parolă"
+                value={loginPassword}
+                onChange={(e) => setLoginPassword(e.target.value)}
+                className="bg-gray-50 dark:bg-gray-800 border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white"
+                required
+              />
+              {loginError && <p className="text-red-400 text-sm text-center">{loginError}</p>}
+              <Button
+                type="submit"
+                className="w-full bg-yellow-500 hover:bg-yellow-600 text-black font-bold"
+                disabled={loginMut.isPending}
+              >
+                {loginMut.isPending ? "Se autentifică..." : "Autentificare Dispatcher"}
+              </Button>
+            </form>
           </CardContent>
         </Card>
       </div>
@@ -530,44 +609,87 @@ export default function Dispatcher() {
   const assignedRides = activeRidesQuery.data?.filter((r) => r.status !== "pending") ?? [];
 
   return (
-    <div className="min-h-screen bg-gray-950 text-white flex flex-col">
+    <div className="h-screen bg-gray-100 dark:bg-gray-950 text-gray-900 dark:text-white flex flex-col overflow-x-hidden">
       {/* Header */}
-      <header className="bg-gray-900 border-b border-gray-800 px-6 py-3 flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <span className="text-2xl">🚖</span>
-          <h1 className="text-xl font-bold text-yellow-400">Taxi Dispatcher</h1>
-          <Badge className="bg-green-600 text-white">Online</Badge>
+      <header className="bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800 px-3 md:px-6 py-3 flex items-center justify-between gap-2 flex-shrink-0">
+        <div className="flex items-center gap-2 md:gap-3">
+          <span className="text-xl md:text-2xl">🚖</span>
+          <h1 className="text-base md:text-xl font-bold text-yellow-600 dark:text-yellow-400">Taxi Dispatcher</h1>
+          <Badge className="bg-green-600 text-white hidden md:inline-flex">Online</Badge>
         </div>
-        <div className="flex items-center gap-4">
-          <span className="text-gray-400 text-sm">{user?.name}</span>
-          <Button variant="outline" size="sm" onClick={() => logout()} className="border-gray-600 text-gray-300 hover:bg-gray-800">
-            <LogOut className="w-4 h-4 mr-1" /> Ieșire
+        <div className="flex items-center gap-2 md:gap-4">
+          <span className="text-gray-500 dark:text-gray-400 text-xs md:text-sm hidden md:inline">{user?.name}</span>
+          <button
+            onClick={() => {
+              const next = !autoAssign;
+              setAutoAssign(next);
+              try { localStorage.setItem("dispatcher_auto_assign", String(next)); } catch {}
+              toast.info(next ? "Asignare automată activată" : "Asignare manuală activată");
+            }}
+            className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-all border ${
+              autoAssign
+                ? "bg-green-600 border-green-500 text-white shadow-lg shadow-green-900/30"
+                : "bg-gray-200 dark:bg-gray-800 border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300"
+            }`}
+            title={autoAssign ? "Mod automat: cursa se asignează automat către cel mai apropiat șofer" : "Mod manual: selectezi manual șoferul"}
+          >
+            {autoAssign ? <Zap className="w-3.5 h-3.5" /> : <Hand className="w-3.5 h-3.5" />}
+            <span className="hidden md:inline">{autoAssign ? "Auto" : "Manual"}</span>
+          </button>
+          {/* PTT Button */}
+          <button
+            onMouseDown={pttStart}
+            onMouseUp={pttStop}
+            onMouseLeave={() => { if (pttActive) pttStop(); }}
+            onTouchStart={(e) => { e.preventDefault(); pttStart(); }}
+            onTouchEnd={(e) => { e.preventDefault(); pttStop(); }}
+            className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-all border ${
+              pttActive
+                ? "bg-red-600 border-red-500 text-white shadow-lg shadow-red-900/30 animate-pulse"
+                : "bg-gray-200 dark:bg-gray-800 border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-700"
+            }`}
+            title="Apasă și ține apăsat pentru a vorbi cu toți șoferii"
+          >
+            <Mic className="w-3.5 h-3.5" />
+            <span className="hidden md:inline">{pttActive ? "Transmit..." : "Radio"}</span>
+          </button>
+          <ThemeToggle />
+          <Button variant="outline" size="sm" onClick={() => logout()} className="border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800">
+            <LogOut className="w-4 h-4 mr-1" /> <span className="hidden md:inline">Ieșire</span>
           </Button>
         </div>
       </header>
 
-      <div className="flex flex-1 overflow-hidden">
+      {/* PTT Incoming Indicator */}
+      {pttIncoming && (
+        <div className="bg-red-600 text-white px-4 py-2 flex items-center justify-center gap-2 text-sm font-semibold animate-pulse">
+          <Mic className="w-4 h-4" />
+          <span>🔊 Șoferul {pttIncoming.driverName} transmite...</span>
+        </div>
+      )}
+
+      <div className="flex flex-1 overflow-hidden flex-col md:flex-row">
         {/* Sidebar */}
-        <div className="w-96 bg-gray-900 border-r border-gray-800 flex flex-col overflow-hidden">
+        <div className="w-full md:w-80 lg:w-96 flex-1 md:flex-none min-h-0 bg-white dark:bg-gray-900 border-b md:border-b-0 md:border-r border-gray-200 dark:border-gray-800 flex flex-col overflow-hidden">
           {/* Stats Bar */}
-          <div className="px-3 py-3 border-b border-gray-800 grid grid-cols-3 gap-2">
-            <Card className="bg-gray-800 border-gray-700 p-2">
-              <div className="text-xs text-gray-400">Curse</div>
-              <div className="text-lg font-bold text-red-400">{pendingRides.length}</div>
+          <div className="px-3 py-3 border-b border-gray-200 dark:border-gray-800 grid grid-cols-3 gap-2">
+            <Card className="bg-gray-50 dark:bg-gray-800 border-gray-200 dark:border-gray-700 p-2">
+              <div className="text-xs text-gray-500 dark:text-gray-400">Curse</div>
+              <div className="text-lg font-bold text-red-500 dark:text-red-400">{pendingRides.length}</div>
             </Card>
-            <Card className="bg-gray-800 border-gray-700 p-2">
-              <div className="text-xs text-gray-400">Active</div>
-              <div className="text-lg font-bold text-blue-400">{assignedRides.length}</div>
+            <Card className="bg-gray-50 dark:bg-gray-800 border-gray-200 dark:border-gray-700 p-2">
+              <div className="text-xs text-gray-500 dark:text-gray-400">Active</div>
+              <div className="text-lg font-bold text-blue-500 dark:text-blue-400">{assignedRides.length}</div>
             </Card>
-            <Card className="bg-gray-800 border-gray-700 p-2">
-              <div className="text-xs text-gray-400">Șoferi</div>
-              <div className="text-lg font-bold text-green-400">{driversQuery.data?.length || 0}</div>
+            <Card className="bg-gray-50 dark:bg-gray-800 border-gray-200 dark:border-gray-700 p-2">
+              <div className="text-xs text-gray-500 dark:text-gray-400">Șoferi</div>
+              <div className="text-lg font-bold text-green-500 dark:text-green-400">{driversQuery.data?.length || 0}</div>
             </Card>
           </div>
 
           <Tabs defaultValue="pending" className="flex flex-col flex-1 overflow-hidden">
-            <TabsList className="grid grid-cols-5 m-3 bg-gray-800">
-              <TabsTrigger value="pending" className="text-xs font-semibold dispatcher-tab-pending">
+            <TabsList className="grid grid-cols-5 m-3 bg-gray-200 dark:bg-gray-800">
+              <TabsTrigger value="pending" className={`text-xs font-semibold dispatcher-tab-pending ${newRideFlash ? "border-glow-yellow alert-flash" : ""}`}>
                 <Car className="w-3 h-3 mr-1" /> Curse
                 {pendingRides.length > 0 && (
                   <span className="ml-1 bg-red-600 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center font-bold animate-pulse">
@@ -952,11 +1074,11 @@ export default function Dispatcher() {
         </div>
 
         {/* Map */}
-        <div className="flex-1 relative flex flex-col">
+        <div className="flex-1 relative flex flex-col min-h-0" style={{ isolation: "isolate" }}>
           <MapView onMapReady={handleMapReady} className="flex-1 w-full" />
 
           {/* Map Legend */}
-          <div className="absolute top-4 right-4 bg-gray-900 bg-opacity-90 rounded-lg p-3 text-xs text-white border border-gray-700">
+          <div className="absolute top-2 right-2 md:top-4 md:right-4 bg-gray-900 bg-opacity-90 rounded-lg p-2 md:p-3 text-[10px] md:text-xs text-white border border-gray-700 z-[1000]">
             <div className="font-semibold mb-2 text-yellow-400">Legendă</div>
             <div className="flex items-center gap-2 mb-2">
               <div className="w-3 h-3 bg-green-500 rounded-full"></div>
@@ -976,7 +1098,7 @@ export default function Dispatcher() {
 
       {/* Client Profile Dialog */}
       <Dialog open={!!selectedClientId} onOpenChange={(open) => !open && setSelectedClientId(null)}>
-        <DialogContent className="bg-gray-900 border-gray-700 text-white max-h-screen overflow-y-auto max-w-2xl">
+        <DialogContent className="bg-gray-900 border-gray-700 text-white max-h-[90vh] overflow-y-auto w-[calc(100vw-2rem)] max-w-2xl">
           {clientProfileQuery.isLoading ? (
             <div className="flex items-center justify-center py-8">
               <p className="text-gray-400">Se încarcă profil...</p>
@@ -1130,27 +1252,42 @@ export default function Dispatcher() {
             {availableDrivers.length === 0 ? (
               <p className="text-red-400 text-center py-4">Niciun șofer disponibil momentan</p>
             ) : (
-              availableDrivers.map((driver) => (
-                <Button
-                  key={driver.id}
-                  variant="outline"
-                  className="border-gray-600 hover:bg-gray-800 text-white justify-start"
-                  onClick={() => {
-                    if (selectedRide) assignRideMut.mutate({ rideId: selectedRide, driverId: driver.id });
-                  }}
-                  disabled={assignRideMut.isPending}
-                >
-                  <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 bg-green-700 rounded-full flex items-center justify-center text-sm font-bold">
-                      {driver.name[0]}
+              availableDrivers.map((driver, idx) => {
+                const lastRide = (driver as any).lastCompletedRideAt;
+                const timeAgo = lastRide ? (() => {
+                  const diff = Date.now() - new Date(lastRide).getTime();
+                  const mins = Math.floor(diff / 60000);
+                  if (mins < 60) return `${mins} min`;
+                  const hrs = Math.floor(mins / 60);
+                  if (hrs < 24) return `${hrs}h ${mins % 60}min`;
+                  return `${Math.floor(hrs / 24)}z`;
+                })() : null;
+                return (
+                  <Button
+                    key={driver.id}
+                    variant="outline"
+                    className={`border-gray-600 hover:bg-gray-800 text-white justify-start ${idx === 0 ? "ring-2 ring-yellow-500" : ""}`}
+                    onClick={() => {
+                      if (selectedRide) assignRideMut.mutate({ rideId: selectedRide, driverId: driver.id });
+                    }}
+                    disabled={assignRideMut.isPending}
+                  >
+                    <div className="flex items-center gap-3 w-full">
+                      <div className="w-8 h-8 bg-green-700 rounded-full flex items-center justify-center text-sm font-bold shrink-0">
+                        {driver.name[0]}
+                      </div>
+                      <div className="text-left flex-1">
+                        <p className="font-medium">{driver.name} {idx === 0 && <span className="text-yellow-400 text-xs ml-1">⭐ Cel mai vechi</span>}</p>
+                        <p className="text-gray-400 text-xs">
+                          @{driver.username} {driver.phone && `· ${driver.phone}`}
+                          {timeAgo && <span className="ml-1 text-yellow-400">· Ultima cursă: {timeAgo} în urmă</span>}
+                          {!timeAgo && <span className="ml-1 text-gray-500">· Fără curse</span>}
+                        </p>
+                      </div>
                     </div>
-                    <div className="text-left">
-                      <p className="font-medium">{driver.name}</p>
-                      <p className="text-gray-400 text-xs">@{driver.username} {driver.phone && `· ${driver.phone}`}</p>
-                    </div>
-                  </div>
-                </Button>
-              ))
+                  </Button>
+                );
+              })
             )}
           </div>
         </DialogContent>
