@@ -31,6 +31,7 @@ import {
   updateDriverStatus,
   updateRideStatus,
   upsertClient,
+  registerClient,
   upsertUser,
   getUserByOpenId,
   getUserByEmail,
@@ -338,6 +339,59 @@ export const appRouter = router({
 
   // ─── Client Auth ────────────────────────────────────────────────────────────
   clientApp: router({
+    // Create an account with phone + password + name
+    register: publicProcedure
+      .input(
+        z.object({
+          phone: z.string().min(10, "Număr de telefon invalid"),
+          password: z.string().min(6, "Parola trebuie să aibă minim 6 caractere"),
+          name: z.string().min(2, "Introdu numele"),
+        })
+      )
+      .mutation(async ({ input }) => {
+        const phone = input.phone.trim();
+        const existing = await getClientByPhone(phone);
+        if (existing && existing.passwordHash) {
+          throw new TRPCError({
+            code: "CONFLICT",
+            message: "Există deja un cont cu acest număr. Autentifică-te.",
+          });
+        }
+        const passwordHash = await bcrypt.hash(input.password, 10);
+        const client = await registerClient(phone, passwordHash, input.name.trim());
+        const token = generateToken();
+        const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+        await createClientSession(client.id, token, expiresAt);
+        const { passwordHash: _ph, ...safeClient } = client;
+        return { token, client: safeClient };
+      }),
+
+    // Log in with phone + password
+    login: publicProcedure
+      .input(z.object({ phone: z.string(), password: z.string() }))
+      .mutation(async ({ input }) => {
+        const phone = input.phone.trim();
+        const client = await getClientByPhone(phone);
+        if (!client || !client.passwordHash) {
+          throw new TRPCError({
+            code: "UNAUTHORIZED",
+            message: "Telefon sau parolă incorectă",
+          });
+        }
+        const valid = await bcrypt.compare(input.password, client.passwordHash);
+        if (!valid) {
+          throw new TRPCError({
+            code: "UNAUTHORIZED",
+            message: "Telefon sau parolă incorectă",
+          });
+        }
+        const token = generateToken();
+        const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+        await createClientSession(client.id, token, expiresAt);
+        const { passwordHash: _ph, ...safeClient } = client;
+        return { token, client: safeClient };
+      }),
+
     sendOtp: publicProcedure
       .input(z.object({ phone: z.string() }))
       .mutation(async ({ input }) => {
@@ -367,7 +421,8 @@ export const appRouter = router({
         const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
         await createClientSession(client.id, token, expiresAt);
         console.log(`[verifyOtp] Session created for client ${client.id}`);
-        return { token, client };
+        const { passwordHash: _ph, ...safeClient } = client;
+        return { token, client: safeClient };
       }),
 
     logout: publicProcedure

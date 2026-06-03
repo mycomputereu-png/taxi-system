@@ -49,6 +49,7 @@ export type InsertDriver = typeof drivers.$inferInsert;
 export const clients = mysqlTable("clients", {
   id: int("id").autoincrement().primaryKey(),
   phone: varchar("phone", { length: 32 }).notNull().unique(),
+  passwordHash: varchar("passwordHash", { length: 256 }),
   name: varchar("name", { length: 128 }),
   currentLat: decimal("currentLat", { precision: 10, scale: 7 }),
   currentLng: decimal("currentLng", { precision: 10, scale: 7 }),

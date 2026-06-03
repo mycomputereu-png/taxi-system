@@ -8,7 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import { useSocket } from "@/hooks/useSocket";
-import { Phone, MapPin, Car, Clock, CheckCircle, XCircle, Navigation, User } from "lucide-react";
+import { Phone, MapPin, Car, Clock, CheckCircle, XCircle, Navigation, User, Lock } from "lucide-react";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { useWakeLock } from "@/hooks/useWakeLock";
 import ClientProfile from "./ClientProfile";
@@ -88,13 +88,12 @@ export default function ClientApp() {
       emit("auth:client", { token: session.token });
     }
   }, [session, emit]);
+  const [authMode, setAuthMode] = useState<"login" | "register">("login");
   const [phone, setPhone] = useState("");
-  const [otp, setOtp] = useState("");
-  const [otpSent, setOtpSent] = useState(false);
-  const [devOtp, setDevOtp] = useState<string | null>(null);
-  const [name, setName] = useState("");
-  const [nameSubmitted, setNameSubmitted] = useState(false);
-  const [tempToken, setTempToken] = useState<string | null>(null);
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [firstName, setFirstName] = useState(""); // Nume
+  const [lastName, setLastName] = useState(""); // Prenume
 
   // Ride state
   const [rideStatus, setRideStatus] = useState<RideStatus>("idle");
@@ -134,34 +133,28 @@ export default function ClientApp() {
     clientPos !== null && gpsAccuracy !== null && gpsAccuracy <= GPS_ACCURACY_THRESHOLD_M;
 
   // tRPC
-  const sendOtpMut = trpc.clientApp.sendOtp.useMutation({
+  const handleAuthSuccess = (data: { token: string; client: { id: number; phone: string } }) => {
+    const s: ClientSession = {
+      token: data.token,
+      clientId: data.client?.id ?? 0,
+      phone: data.client?.phone ?? phone,
+    };
+    saveSession(s);
+    setSession(s);
+  };
+
+  const registerMut = trpc.clientApp.register.useMutation({
     onSuccess: (data) => {
-      setOtpSent(true);
-      setDevOtp(data.code ?? null);
-      toast.success("Cod OTP trimis! (demo: codul apare mai jos)");
+      handleAuthSuccess(data);
+      toast.success("Cont creat cu succes!");
     },
     onError: (e) => toast.error(e.message),
   });
 
-  const verifyOtpMut = trpc.clientApp.verifyOtp.useMutation({
+  const loginMut = trpc.clientApp.login.useMutation({
     onSuccess: (data) => {
-      setTempToken(data.token);
-      setNameSubmitted(false);
-      setName("");
+      handleAuthSuccess(data);
       toast.success("Autentificat cu succes!");
-    },
-    onError: (e) => toast.error(e.message),
-  });
-  const updateNameMut = trpc.clientApp.updateClientName.useMutation({
-    onSuccess: () => {
-      if (tempToken) {
-        const s: ClientSession = { token: tempToken, clientId: 0, phone };
-        saveSession(s);
-        setSession(s);
-      }
-      setNameSubmitted(true);
-      setTempToken(null);
-      toast.success("Nume salvat cu succes!");
     },
     onError: (e) => toast.error(e.message),
   });
@@ -291,7 +284,7 @@ export default function ClientApp() {
     }
   }, [activeRideQuery.data]);
 
-  // Socket.IO auth is now emitted in verifyOtpMut.onSuccess
+  // Socket.IO auth is emitted by the session effect after login/register
 
   // Countdown timer for ETA
   useEffect(() => {
@@ -562,104 +555,140 @@ export default function ClientApp() {
           <CardHeader className="text-center pb-2">
             <div className="text-5xl mb-2">🚖</div>
             <CardTitle className="text-gray-900 dark:text-white text-2xl font-bold">Taxi App</CardTitle>
-            <p className="text-gray-500 dark:text-gray-400 text-sm">Autentificare cu număr de telefon</p>
+            <p className="text-gray-500 dark:text-gray-400 text-sm">
+              {authMode === "login"
+                ? "Autentificare cu telefon și parolă"
+                : "Creează un cont nou"}
+            </p>
           </CardHeader>
           <CardContent className="flex flex-col gap-4">
-            {!otpSent && !tempToken ? (
+            <div className="relative">
+              <Phone className="absolute left-3 top-3 w-4 h-4 text-gray-400" />
+              <Input
+                placeholder="+40 7XX XXX XXX"
+                value={phone}
+                onChange={(e) => setPhone(e.target.value)}
+                className="bg-gray-50 dark:bg-gray-800 border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white pl-10"
+                type="tel"
+                autoComplete="tel"
+              />
+            </div>
+
+            <div className="relative">
+              <Lock className="absolute left-3 top-3 w-4 h-4 text-gray-400" />
+              <Input
+                placeholder="Parolă"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="bg-gray-50 dark:bg-gray-800 border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white pl-10"
+                type="password"
+                autoComplete={authMode === "login" ? "current-password" : "new-password"}
+              />
+            </div>
+
+            {authMode === "register" && (
               <>
                 <div className="relative">
-                  <Phone className="absolute left-3 top-3 w-4 h-4 text-gray-400" />
+                  <Lock className="absolute left-3 top-3 w-4 h-4 text-gray-400" />
                   <Input
-                    placeholder="+40 7XX XXX XXX"
-                    value={phone}
-                    onChange={(e) => setPhone(e.target.value)}
+                    placeholder="Confirmă parola"
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
                     className="bg-gray-50 dark:bg-gray-800 border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white pl-10"
-                    type="tel"
+                    type="password"
+                    autoComplete="new-password"
                   />
                 </div>
-                <Button
-                  className="w-full bg-yellow-500 hover:bg-yellow-600 text-black font-bold text-lg py-6"
-                  onClick={() => {
-                    if (phone.length < 10) {
-                      toast.error("Introdu un număr de telefon valid");
-                      return;
-                    }
-                    sendOtpMut.mutate({ phone });
-                  }}
-                  disabled={sendOtpMut.isPending || phone.length < 10}
-                >
-                  {sendOtpMut.isPending ? "Se trimite..." : "Trimite Cod OTP"}
-                </Button>
-              </>
-            ) : tempToken ? (
-              // Name input screen
-              <>
-                <p className="text-gray-500 dark:text-gray-400 text-sm text-center mb-4">
-                  Bun venit! Introdu-ți numele
-                </p>
                 <div className="relative">
                   <User className="absolute left-3 top-3 w-4 h-4 text-gray-400" />
                   <Input
-                    placeholder="Introdu-ți numele"
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
+                    placeholder="Nume"
+                    value={firstName}
+                    onChange={(e) => setFirstName(e.target.value)}
                     className="bg-gray-50 dark:bg-gray-800 border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white pl-10"
                   />
                 </div>
-                <Button
-                  className="w-full bg-yellow-500 hover:bg-yellow-600 text-black font-bold text-lg py-6"
-                  onClick={() => {
-                    if (name.trim().length < 2) {
-                      toast.error("Introdu un nume valid");
-                      return;
-                    }
-                    if (tempToken) updateNameMut.mutate({ token: tempToken, name: name.trim() });
-                  }}
-                  disabled={updateNameMut.isPending || name.trim().length < 2}
-                >
-                  {updateNameMut.isPending ? "Se salvează..." : "Continuă"}
-                </Button>
-              </>
-            ) : (
-              <>
-                <p className="text-gray-500 dark:text-gray-400 text-sm text-center">
-                  Introdu codul trimis la <span className="text-gray-900 dark:text-white font-semibold">{phone}</span>
-                </p>
-                {devOtp && (
-                  <div className="bg-blue-900 border-2 border-blue-500 rounded-lg p-4 text-center">
-                    <p className="text-blue-300 text-sm mb-2 font-semibold">Cod demo (nu trimite SMS real):</p>
-                    <p className="text-white font-mono text-4xl font-bold tracking-widest bg-blue-950 rounded p-3">{devOtp}</p>
-                  </div>
-                )}
-                <Input
-                  placeholder="Cod OTP (6 cifre)"
-                  value={otp}
-                  onChange={(e) => setOtp(e.target.value)}
-                  className="bg-gray-50 dark:bg-gray-800 border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white text-center text-xl tracking-widest"
-                  maxLength={6}
-                />
-                <Button
-                  className="w-full bg-yellow-500 hover:bg-yellow-600 text-black font-bold text-lg py-6"
-                  onClick={() => {
-                    if (otp.length !== 6) {
-                      toast.error("Codul trebuie să aibă 6 cifre");
-                      return;
-                    }
-                    verifyOtpMut.mutate({ phone, code: otp });
-                  }}
-                  disabled={verifyOtpMut.isPending || otp.length !== 6}
-                >
-                  {verifyOtpMut.isPending ? "Se verifică..." : "Verifică Codul"}
-                </Button>
-                <Button
-                  variant="ghost"
-                  className="text-gray-400 hover:text-white"
-                  onClick={() => { setOtpSent(false); setOtp(""); setDevOtp(null); }}
-                >
-                  Schimbă numărul
-                </Button>
+                <div className="relative">
+                  <User className="absolute left-3 top-3 w-4 h-4 text-gray-400" />
+                  <Input
+                    placeholder="Prenume"
+                    value={lastName}
+                    onChange={(e) => setLastName(e.target.value)}
+                    className="bg-gray-50 dark:bg-gray-800 border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white pl-10"
+                  />
+                </div>
               </>
             )}
+
+            {authMode === "login" ? (
+              <Button
+                className="w-full bg-yellow-500 hover:bg-yellow-600 text-black font-bold text-lg py-6"
+                onClick={() => {
+                  if (phone.trim().length < 10) {
+                    toast.error("Introdu un număr de telefon valid");
+                    return;
+                  }
+                  if (password.length < 6) {
+                    toast.error("Parola trebuie să aibă minim 6 caractere");
+                    return;
+                  }
+                  loginMut.mutate({ phone: phone.trim(), password });
+                }}
+                disabled={loginMut.isPending}
+              >
+                {loginMut.isPending ? "Se verifică..." : "Intră în cont"}
+              </Button>
+            ) : (
+              <Button
+                className="w-full bg-yellow-500 hover:bg-yellow-600 text-black font-bold text-lg py-6"
+                onClick={() => {
+                  if (phone.trim().length < 10) {
+                    toast.error("Introdu un număr de telefon valid");
+                    return;
+                  }
+                  if (password.length < 6) {
+                    toast.error("Parola trebuie să aibă minim 6 caractere");
+                    return;
+                  }
+                  if (password !== confirmPassword) {
+                    toast.error("Parolele nu coincid");
+                    return;
+                  }
+                  if (firstName.trim().length < 2) {
+                    toast.error("Introdu numele");
+                    return;
+                  }
+                  if (lastName.trim().length < 2) {
+                    toast.error("Introdu prenumele");
+                    return;
+                  }
+                  registerMut.mutate({
+                    phone: phone.trim(),
+                    password,
+                    name: `${firstName.trim()} ${lastName.trim()}`,
+                  });
+                }}
+                disabled={registerMut.isPending}
+              >
+                {registerMut.isPending ? "Se creează..." : "Creează Cont"}
+              </Button>
+            )}
+
+            <Button
+              variant="ghost"
+              className="text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white text-sm"
+              onClick={() => {
+                setAuthMode(authMode === "login" ? "register" : "login");
+                setPassword("");
+                setConfirmPassword("");
+                setFirstName("");
+                setLastName("");
+              }}
+            >
+              {authMode === "login"
+                ? "Nu ai cont? Creează Cont"
+                : "Ai deja cont? Autentifică-te"}
+            </Button>
           </CardContent>
         </Card>
       </div>

@@ -108,6 +108,13 @@ async function runMigrations() {
     ).catch(() => {
       // Column might already exist, ignore error
     });
+
+    // Add passwordHash column to clients for phone+password auth
+    await db.execute(
+      "ALTER TABLE `clients` ADD COLUMN `passwordHash` varchar(256) NULL"
+    ).catch(() => {
+      // Column might already exist, ignore error
+    });
     
     // Fix distanceKm column name to distance_km if it exists as distanceKm
     await db.execute(
@@ -290,6 +297,22 @@ export async function upsertClient(phone: string, name?: string): Promise<Client
     .onDuplicateKeyUpdate({ set: { name: name ?? null } });
   const result = await db.select().from(clients).where(eq(clients.phone, phone)).limit(1);
   console.log(`[DB] upsertClient result: id=${result[0]?.id}, phone=${result[0]?.phone}`);
+  return result[0]!;
+}
+
+export async function registerClient(
+  phone: string,
+  passwordHash: string,
+  name: string
+): Promise<Client> {
+  const db = await getDb();
+  if (!db) throw new Error("DB not available");
+  console.log(`[DB] registerClient: phone=${phone}, name=${name}`);
+  await db
+    .insert(clients)
+    .values({ phone, passwordHash, name })
+    .onDuplicateKeyUpdate({ set: { passwordHash, name } });
+  const result = await db.select().from(clients).where(eq(clients.phone, phone)).limit(1);
   return result[0]!;
 }
 
